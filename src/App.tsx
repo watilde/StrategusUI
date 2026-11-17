@@ -112,7 +112,7 @@ export function App() {
             Reset to demo (GiBleed)
           </button>
           <label className="button ghost">
-            Load IR…
+            Load IR
             <input
               type="file"
               accept="application/json,.json"
