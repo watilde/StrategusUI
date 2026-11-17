@@ -13,6 +13,7 @@ import { OutputPanel } from "./components/OutputPanel";
 import { VocabularyPanel } from "./components/VocabularyPanel";
 import { NegativeControlEditor } from "./components/NegativeControlEditor";
 import { LlmDraftPanel } from "./components/LlmDraftPanel";
+import { ZeroTransmission } from "./components/ZeroTransmission";
 import { parseDraft } from "./llm/prompt";
 import { Checkbox, Field, NumberInput, Section, Select } from "./components/fields";
 
@@ -114,7 +115,10 @@ export function App() {
     <div className="app">
       <header className="header">
         <div>
-          <h1>Strategus UI</h1>
+          <div className="title-row">
+            <h1>Strategus UI</h1>
+            <ZeroTransmission />
+          </div>
           <p className="subtitle">
             From a PICO question to a Strategus analysis specification for a comparative cohort study (CohortGenerator + CohortMethod), built entirely in your browser. Nothing you enter is sent anywhere.
           </p>

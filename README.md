@@ -9,6 +9,17 @@ Current scope: comparative cohort studies with **CohortGenerator + CohortDiagnos
 LLM through a copy-paste prompt (or entered through the form), with concept search over a vocabulary and outcomes that
 can reuse published definitions from the OHDSI PhenotypeLibrary. The Eunomia GiBleed example (celecoxib vs diclofenac → GI bleed) is built in.
 
+## Zero transmission
+
+Nothing you type, paste or load leaves the browser: the research question, the study, LLM replies and vocabulary
+files stay on your machine, and the page never calls an LLM (you copy the prompt and paste the reply yourself).
+
+This is enforced, not just intended. The built page carries a Content-Security-Policy (`vite.config.ts`) that only
+allows loading and fetching files from its own origin (`connect-src 'self'`, no inline scripts, no eval), so the
+browser blocks a request to any other site. The app shows this as a "Zero transmission" badge with details.
+The page downloads only its own files: the app, the demo vocabulary, DuckDB-WASM and PhenotypeLibrary definitions.
+Like any website, the host (GitHub Pages) sees requests for those files.
+
 ## Architecture
 
 ```

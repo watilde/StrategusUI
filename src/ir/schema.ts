@@ -16,6 +16,10 @@ import { z } from "zod";
  * Keep it small and domain-oriented. Do not mirror Strategus' JSON here.
  */
 
+// No `new Function` code generation: the built page's Content-Security-Policy
+// forbids eval (see vite.config.ts), and Zod would otherwise probe for it.
+z.config({ jitless: true });
+
 export const IR_VERSION = "0.1" as const;
 
 export const ConceptRefSchema = z.object({
