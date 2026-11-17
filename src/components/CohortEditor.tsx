@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import type { CohortSpec, ConceptRef } from "../ir/schema";
-import { EUNOMIA_CONCEPT_LIST } from "../vocab/eunomia";
+import { toConceptRef, type VocabularySource } from "../vocab/types";
+import { ConceptSearch } from "./ConceptSearch";
+import { DescendantPreview } from "./DescendantPreview";
 import { Checkbox, Field, NumberInput, Select } from "./fields";
 
 const KIND_LABEL: Record<CohortSpec["kind"], string> = {
@@ -17,40 +19,53 @@ function changeKind(cohort: CohortSpec, kind: CohortSpec["kind"]): CohortSpec {
   return kind === "drug_new_user" ? { ...base, kind, eraGapDays: 30 } : { ...base, kind };
 }
 
+function ManualConcept({ domainId, onAdd }: { domainId: string; onAdd: (c: ConceptRef) => void }) {
+  const [form, setForm] = useState({ conceptId: "", conceptName: "", vocabularyId: "" });
+  const add = () => {
+    const id = Number.parseInt(form.conceptId, 10);
+    if (!id || !form.conceptName) return;
+    onAdd({
+      conceptId: id,
+      conceptName: form.conceptName,
+      domainId,
+      vocabularyId: form.vocabularyId || "Unknown",
+      conceptClassId: "",
+      conceptCode: "",
+      standardConcept: "S",
+      includeDescendants: true,
+    });
+    setForm({ conceptId: "", conceptName: "", vocabularyId: "" });
+  };
+  return (
+    <details>
+      <summary>Enter a concept manually</summary>
+      <div className="row">
+        <input placeholder="Concept ID" inputMode="numeric" value={form.conceptId} onChange={(e) => setForm({ ...form, conceptId: e.target.value })} />
+        <input placeholder="Name" value={form.conceptName} onChange={(e) => setForm({ ...form, conceptName: e.target.value })} />
+        <input placeholder="Vocabulary (e.g. RxNorm)" value={form.vocabularyId} onChange={(e) => setForm({ ...form, vocabularyId: e.target.value })} />
+        <button type="button" onClick={add}>
+          Add
+        </button>
+      </div>
+      <p className="hint">For concepts that are not in the loaded vocabulary. Checks will flag them as not found.</p>
+    </details>
+  );
+}
+
 export function CohortEditor({
   cohort,
+  vocabulary,
   onChange,
   onRemove,
 }: {
   cohort: CohortSpec;
+  vocabulary: VocabularySource | null;
   onChange: (c: CohortSpec) => void;
   onRemove?: () => void;
 }) {
   const domain = KIND_DOMAIN[cohort.kind];
-  const candidates = EUNOMIA_CONCEPT_LIST.filter(
-    (c) => c.domainId === domain && !cohort.concepts.some((x) => x.conceptId === c.conceptId),
-  );
-  const [manual, setManual] = useState({ conceptId: "", conceptName: "", vocabularyId: "" });
-
+  const [preview, setPreview] = useState<number | null>(null);
   const setConcepts = (concepts: ConceptRef[]) => onChange({ ...cohort, concepts });
-  const addManual = () => {
-    const id = Number.parseInt(manual.conceptId, 10);
-    if (!id || !manual.conceptName) return;
-    setConcepts([
-      ...cohort.concepts,
-      {
-        conceptId: id,
-        conceptName: manual.conceptName,
-        domainId: domain,
-        vocabularyId: manual.vocabularyId || "Unknown",
-        conceptClassId: "",
-        conceptCode: "",
-        standardConcept: "S",
-        includeDescendants: true,
-      },
-    ]);
-    setManual({ conceptId: "", conceptName: "", vocabularyId: "" });
-  };
 
   return (
     <div className="cohort">
@@ -94,31 +109,48 @@ export function CohortEditor({
         </thead>
         <tbody>
           {cohort.concepts.map((c, i) => (
-            <tr key={c.conceptId}>
-              <td className="mono">{c.conceptId}</td>
-              <td>{c.conceptName}</td>
-              <td>{c.vocabularyId}</td>
-              <td>
-                <input
-                  type="checkbox"
-                  checked={c.includeDescendants}
-                  aria-label={`Include descendants of ${c.conceptName}`}
-                  onChange={(e) =>
-                    setConcepts(cohort.concepts.map((x, j) => (j === i ? { ...x, includeDescendants: e.target.checked } : x)))
-                  }
-                />
-              </td>
-              <td>
-                <button
-                  type="button"
-                  className="ghost"
-                  aria-label={`Remove ${c.conceptName}`}
-                  onClick={() => setConcepts(cohort.concepts.filter((_, j) => j !== i))}
-                >
-                  ×
-                </button>
-              </td>
-            </tr>
+            <Fragment key={c.conceptId}>
+              <tr>
+                <td className="mono">{c.conceptId}</td>
+                <td>{c.conceptName}</td>
+                <td>{c.vocabularyId}</td>
+                <td className="nowrap">
+                  <input
+                    type="checkbox"
+                    checked={c.includeDescendants}
+                    aria-label={`Include descendants of ${c.conceptName}`}
+                    onChange={(e) => setConcepts(cohort.concepts.map((x, j) => (j === i ? { ...x, includeDescendants: e.target.checked } : x)))}
+                  />{" "}
+                  {vocabulary && (
+                    <button
+                      type="button"
+                      className="ghost small"
+                      aria-expanded={preview === c.conceptId}
+                      onClick={() => setPreview(preview === c.conceptId ? null : c.conceptId)}
+                    >
+                      {preview === c.conceptId ? "Hide" : "Preview"}
+                    </button>
+                  )}
+                </td>
+                <td>
+                  <button
+                    type="button"
+                    className="ghost"
+                    aria-label={`Remove ${c.conceptName}`}
+                    onClick={() => setConcepts(cohort.concepts.filter((_, j) => j !== i))}
+                  >
+                    ×
+                  </button>
+                </td>
+              </tr>
+              {preview === c.conceptId && vocabulary && (
+                <tr className="preview-row">
+                  <td colSpan={5}>
+                    <DescendantPreview vocabulary={vocabulary} conceptId={c.conceptId} />
+                  </td>
+                </tr>
+              )}
+            </Fragment>
           ))}
           {cohort.concepts.length === 0 && (
             <tr>
@@ -130,55 +162,21 @@ export function CohortEditor({
         </tbody>
       </table>
 
-      <div className="row add-concept">
-        {candidates.length > 0 && (
-          <select
-            value=""
-            aria-label="Add a concept from the demo vocabulary"
-            onChange={(e) => {
-              const c = candidates.find((x) => String(x.conceptId) === e.target.value);
-              if (c) setConcepts([...cohort.concepts, c]);
-            }}
-          >
-            <option value="">Add from demo vocabulary (Eunomia)…</option>
-            {candidates.map((c) => (
-              <option key={c.conceptId} value={c.conceptId}>
-                {c.conceptName} ({c.conceptId})
-              </option>
-            ))}
-          </select>
-        )}
-        <details>
-          <summary>Enter a concept ID manually</summary>
-          <div className="row">
-            <input
-              placeholder="Concept ID"
-              inputMode="numeric"
-              value={manual.conceptId}
-              onChange={(e) => setManual({ ...manual, conceptId: e.target.value })}
-            />
-            <input
-              placeholder="Name"
-              value={manual.conceptName}
-              onChange={(e) => setManual({ ...manual, conceptName: e.target.value })}
-            />
-            <input
-              placeholder="Vocabulary (e.g. RxNorm)"
-              value={manual.vocabularyId}
-              onChange={(e) => setManual({ ...manual, vocabularyId: e.target.value })}
-            />
-            <button type="button" onClick={addManual}>
-              Add
-            </button>
-          </div>
-          <p className="hint">Manually entered concepts are not checked against a vocabulary. Vocabulary search replaces this in step 2.</p>
-        </details>
-      </div>
-      <Checkbox
-        checked={cohort.concepts.every((c) => c.includeDescendants)}
-        onChange={(v) => setConcepts(cohort.concepts.map((c) => ({ ...c, includeDescendants: v })))}
-        label="Include descendants for all concepts"
+      <ConceptSearch
+        vocabulary={vocabulary}
+        domainId={domain}
+        excludeIds={cohort.concepts.map((c) => c.conceptId)}
+        placeholder={`Add a ${domain.toLowerCase()} concept: name, code or concept ID`}
+        onPick={(c) => setConcepts([...cohort.concepts, toConceptRef(c)])}
       />
+      <ManualConcept domainId={domain} onAdd={(c) => setConcepts([...cohort.concepts, c])} />
+      {cohort.concepts.length > 1 && (
+        <Checkbox
+          checked={cohort.concepts.every((c) => c.includeDescendants)}
+          onChange={(v) => setConcepts(cohort.concepts.map((c) => ({ ...c, includeDescendants: v })))}
+          label="Include descendants for all concepts"
+        />
+      )}
     </div>
   );
 }

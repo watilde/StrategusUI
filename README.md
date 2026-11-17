@@ -3,8 +3,8 @@
 Build [OHDSI Strategus](https://github.com/OHDSI/Strategus) analysis specifications in the browser.
 It is a static site (GitHub Pages): no server, and nothing you enter leaves your browser.
 
-Current scope (step 1): comparative cohort studies with **CohortGenerator + CohortMethod**,
-entered through a form. The Eunomia GiBleed example (celecoxib vs diclofenac → GI bleed) is built in.
+Current scope: comparative cohort studies with **CohortGenerator + CohortMethod**, entered through a form,
+with concept search over a vocabulary. The Eunomia GiBleed example (celecoxib vs diclofenac → GI bleed) is built in.
 
 ## Architecture
 
@@ -25,11 +25,22 @@ form (later: LLM draft) ──► Study IR (Zod) ──► TypeScript compiler �
   downloadable R script). `r/strategus-from-ir.R` builds the same specification with
   `Strategus`, `CohortMethod::createCmAnalysis()` and friends. The R script that the UI offers
   for download embeds this file verbatim.
+- **Vocabulary** (`src/vocab/`). Two interchangeable sources behind one interface:
+  - the **Eunomia demo vocabulary** (445 concepts, bundled, loaded lazily), searched in memory;
+  - **your own Athena vocabulary**: `CONCEPT.csv` (+ optional `CONCEPT_SYNONYM.csv`, `CONCEPT_ANCESTOR.csv`)
+    read in place with DuckDB-WASM through the File API. Nothing is uploaded. The WASM is self-hosted and only
+    downloaded when you load a vocabulary.
+
+  Both sources share one definition of search (`src/vocab/search.ts`): concept ID, exact code, or all tokens in the
+  name or a synonym, ranked identically. Tests run the DuckDB SQL on native DuckDB and require the same results as
+  the in-memory search.
 - **Validation layers**
   1. Zod schema (`StudyIRSchema`)
   2. Semantic rules (`src/validate/semantic.ts`): duplicate IDs, domain mismatches, time at risk, negative controls, …
-  3. R build: Circe SQL rendering for every cohort plus Strategus/CohortMethod constructors (CI)
-  4. Execution on the Eunomia synthetic CDM (CI)
+  3. Concept checks against the loaded vocabulary (`src/validate/concepts.ts`): the ID exists, is valid and standard,
+     and its name and domain match what the study says. This is what will catch wrong or hallucinated IDs once an LLM drafts the IR.
+  4. R build: Circe SQL rendering for every cohort plus Strategus/CohortMethod constructors (CI)
+  5. Execution on the Eunomia synthetic CDM (CI)
 
 ## Development
 
@@ -52,6 +63,8 @@ npm run golden:compare                               # TypeScript output must ma
 Rscript r/run-eunomia.R fixtures/out/gibleed/spec.ts.json   # execute on Eunomia
 ```
 
+To refresh the bundled demo vocabulary: `Rscript r/extract-eunomia-vocab.R src/vocab/eunomia-vocab.json`.
+
 When you add or change a CohortMethod preset (in `r/strategus-from-ir.R` **and** `CmPresetSchema`),
 or upgrade the R packages:
 
@@ -70,7 +83,8 @@ Enable it once under **Settings → Pages → Source: GitHub Actions**.
 ## Roadmap
 
 1. ✅ Form → IR → CohortGenerator + CohortMethod JSON and R script; CI checks against R and Eunomia
-2. Concept search: bundled Eunomia subset + user-provided Athena vocabulary via DuckDB-WASM (read locally, never uploaded)
+2. ✅ Concept search: bundled Eunomia vocabulary + user-provided Athena vocabulary via DuckDB-WASM (read locally, never uploaded);
+   descendant preview; concept checks
 3. LLM, copy-paste mode: generate a prompt with the IR JSON Schema, paste the answer back, validate, generate a repair prompt
 4. LLM, bring-your-own-key mode (direct browser calls)
 5. OHDSI PhenotypeLibrary reuse; CohortDiagnostics module
@@ -78,5 +92,8 @@ Enable it once under **Settings → Pages → Source: GitHub Actions**.
 ## Limitations
 
 - Cohorts are template-based: new users of a drug (first drug era) and first occurrence of a condition.
-- The demo vocabulary contains only the concepts of the GiBleed example; other concepts can be entered by ID but are not checked against a vocabulary.
-- Negative controls are the 12 from the Strategus example study.
+- The demo vocabulary is the small Eunomia subset; it has almost no hierarchy, so descendant previews need an Athena vocabulary.
+- Source codes (ICD-10-CM, NDC, …) are not yet mapped to standard concepts (`CONCEPT_RELATIONSHIP` "Maps to").
+- The descendant preview scans `CONCEPT_ANCESTOR` on demand; with a full vocabulary this takes a while.
+- Importing a vocabulary happens again on every page load (no browser persistence yet).
+- Negative controls are picked by hand (or the 12 from the Strategus example); there is no candidate generation.

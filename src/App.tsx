@@ -1,13 +1,17 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CmPresetSchema, StudyIRSchema, type CmPreset, type CohortSpec, type StudyIR } from "./ir/schema";
 import { gibleed } from "./ir/presets/gibleed";
 import { buildAnalysisSpecifications } from "./compiler/strategus";
 import { buildRScript } from "./compiler/rScriptBundled";
 import { templates } from "./compiler/templates";
 import { hasErrors, validateStudy, type Issue } from "./validate/semantic";
-import { EUNOMIA_NEGATIVE_CONTROLS } from "./vocab/eunomia";
+import { validateConcepts } from "./validate/concepts";
+import { loadEunomiaVocabulary } from "./vocab/eunomiaSource";
+import type { VocabularySource } from "./vocab/types";
 import { CohortEditor } from "./components/CohortEditor";
 import { OutputPanel } from "./components/OutputPanel";
+import { VocabularyPanel } from "./components/VocabularyPanel";
+import { NegativeControlEditor } from "./components/NegativeControlEditor";
 import { Checkbox, Field, NumberInput, Section, Select } from "./components/fields";
 
 const PRESET_LABEL: Record<CmPreset, string> = {
@@ -27,6 +31,13 @@ export function App() {
   const [ir, setIr] = useState<StudyIR>(gibleed);
   const [importError, setImportError] = useState<string | null>(null);
   const update = (patch: Partial<StudyIR>) => setIr((prev) => ({ ...prev, ...patch }));
+  const [vocabulary, setVocabulary] = useState<VocabularySource | null>(null);
+  const [conceptIssues, setConceptIssues] = useState<Issue[]>([]);
+
+  const useDemoVocabulary = () => {
+    void loadEunomiaVocabulary().then(setVocabulary);
+  };
+  useEffect(useDemoVocabulary, []);
 
   const { issues, specJson, rScript } = useMemo(() => {
     const parsed = StudyIRSchema.safeParse(ir);
@@ -46,7 +57,29 @@ export function App() {
     };
   }, [ir]);
 
+  // Concept checks need the vocabulary (async for DuckDB), so they run separately.
+  useEffect(() => {
+    if (!vocabulary) return;
+    const parsed = StudyIRSchema.safeParse(ir);
+    if (!parsed.success) return setConceptIssues([]);
+    let cancelled = false;
+    validateConcepts(parsed.data, vocabulary).then(
+      (found) => !cancelled && setConceptIssues(found),
+      (e: Error) =>
+        !cancelled && setConceptIssues([{ level: "warning", path: "", message: `Could not check concepts: ${e.message}` }]),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [ir, vocabulary]);
+
+  const allIssues = useMemo(() => [...issues, ...conceptIssues], [issues, conceptIssues]);
   const irJson = useMemo(() => JSON.stringify(ir, null, 2), [ir]);
+
+  const openAthena = async (files: { concept: File; synonym?: File; ancestor?: File }, standardOnly: boolean) => {
+    const { openAthenaVocabulary } = await import("./vocab/duckdbWasm");
+    setVocabulary(await openAthenaVocabulary(files, { standardOnly }));
+  };
 
   const importIr = async (file: File) => {
     try {
@@ -97,6 +130,8 @@ export function App() {
 
       <main className="layout">
         <form className="form" onSubmit={(e) => e.preventDefault()}>
+          <VocabularyPanel vocabulary={vocabulary} onUseDemo={useDemoVocabulary} onOpenAthena={openAthena} />
+
           <Section title="Study">
             <Field label="Title">
               <input value={ir.title} onChange={(e) => update({ title: e.target.value })} />
@@ -112,11 +147,11 @@ export function App() {
           </Section>
 
           <Section title="Target (I: intervention)">
-            <CohortEditor cohort={ir.target} onChange={(target) => update({ target })} />
+            <CohortEditor cohort={ir.target} vocabulary={vocabulary} onChange={(target) => update({ target })} />
           </Section>
 
           <Section title="Comparator (C: comparison)">
-            <CohortEditor cohort={ir.comparator} onChange={(comparator) => update({ comparator })} />
+            <CohortEditor cohort={ir.comparator} vocabulary={vocabulary} onChange={(comparator) => update({ comparator })} />
           </Section>
 
           <Section title="Outcomes (O)">
@@ -124,6 +159,7 @@ export function App() {
               <CohortEditor
                 key={i}
                 cohort={o}
+                vocabulary={vocabulary}
                 onChange={(c: CohortSpec) => update({ outcomes: ir.outcomes.map((x, j) => (j === i ? c : x)) })}
                 onRemove={ir.outcomes.length > 1 ? () => update({ outcomes: ir.outcomes.filter((_, j) => j !== i) }) : undefined}
               />
@@ -209,32 +245,12 @@ export function App() {
           </Section>
 
           <Section title="Negative controls">
-            <p className="hint">
-              {ir.negativeControls.length} outcome(s), {ir.negativeControlSettings.occurrenceType} occurrence,{" "}
-              {ir.negativeControlSettings.detectOnDescendants ? "including" : "excluding"} descendants
-            </p>
-            <div className="row">
-              <button type="button" className="ghost" onClick={() => update({ negativeControls: EUNOMIA_NEGATIVE_CONTROLS })}>
-                Use the 12 from the Strategus example
-              </button>
-              <button type="button" className="ghost" onClick={() => update({ negativeControls: [] })}>
-                Clear
-              </button>
-            </div>
-            {ir.negativeControls.length > 0 && (
-              <ul className="nc-list">
-                {ir.negativeControls.map((n) => (
-                  <li key={n.cohortId}>
-                    <span className="mono">{n.outcomeConceptId}</span> {n.name}
-                  </li>
-                ))}
-              </ul>
-            )}
+            <NegativeControlEditor ir={ir} vocabulary={vocabulary} onChange={(negativeControls) => update({ negativeControls })} />
           </Section>
         </form>
 
         <aside className="side">
-          <OutputPanel issues={issues} specJson={specJson} rScript={rScript} irJson={irJson} blocked={hasErrors(issues) || specJson === null} />
+          <OutputPanel issues={allIssues} specJson={specJson} rScript={rScript} irJson={irJson} blocked={hasErrors(allIssues) || specJson === null} />
           <p className="hint footnote">
             Templates: Strategus {templates.strategus.strategusVersion} / CohortMethod {templates.modules.CohortMethodModule.modulePackageVersion} /
             CohortGenerator {templates.modules.CohortGeneratorModule.modulePackageVersion}

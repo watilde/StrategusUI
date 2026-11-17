@@ -15,11 +15,13 @@
     "templates:extract": "tsx scripts/extract-templates.ts"
   },
   "dependencies": {
+    "@duckdb/duckdb-wasm": "1.33.1-dev57.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@duckdb/node-api": "1.5.4-r.1",
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",

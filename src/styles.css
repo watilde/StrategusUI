@@ -409,3 +409,121 @@ summary {
 .footnote {
   margin-top: 8px;
 }
+
+.concept-search {
+  margin-top: 8px;
+}
+
+.search-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  align-items: center;
+}
+
+.search-options .hint {
+  margin: 0;
+}
+
+.search-results {
+  list-style: none;
+  margin: 4px 0 8px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.search-results li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.search-results li:last-child {
+  border-bottom: none;
+}
+
+.search-results li.non-standard .result-name {
+  font-style: italic;
+}
+
+.result-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.result-name {
+  overflow-wrap: anywhere;
+}
+
+.result-meta {
+  font-size: 0.75rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+button.small {
+  padding: 2px 8px;
+  font-size: 0.8rem;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.preview-row td {
+  background: var(--code-bg);
+}
+
+.descendants ul {
+  margin: 0;
+  padding-left: 18px;
+  max-height: 220px;
+  overflow-y: auto;
+  font-size: 0.85rem;
+}
+
+.vocab-status {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 0 0 8px;
+}
+
+.file-inputs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px 12px;
+  margin: 8px 0;
+}
+
+.file-input {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.file-input input {
+  font-size: 0.85rem;
+}
+
+.error-text {
+  color: var(--error);
+}
+
+a {
+  color: var(--accent);
+}
