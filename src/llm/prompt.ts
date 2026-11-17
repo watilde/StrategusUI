@@ -1,4 +1,5 @@
 import { DraftStudyIRSchema, IR_VERSION, draftStudyIRJsonSchema, type DraftStudyIR } from "../ir/schema";
+import type { Issue } from "../validate/semantic";
 
 /**
  * Copy-paste LLM harness.
@@ -161,6 +162,34 @@ ${errors.map((e) => `- ${e}`).join("\n")}
 
 \`\`\`json
 ${extractJson(previous)}
+\`\`\`
+`;
+}
+
+/**
+ * Issues the LLM can fix by editing the study: schema and study-level problems.
+ * Concept matching and negative controls are left to the person, so they are
+ * not sent.
+ */
+export function fixableIssues(issues: Issue[]): Issue[] {
+  return issues.filter((i) => (i.source === "study" || i.source === "schema") && i.level !== "info");
+}
+
+/** A follow-up prompt asking the LLM to revise a loaded study to address the app's checks. */
+export function buildFixPrompt(issues: Issue[], ir: DraftStudyIR): string {
+  const fixable = fixableIssues(issues);
+  return `Strategus UI loaded your Study IR and its checks found problems. Revise the study to fix them and reply with the complete corrected JSON object only, following the same rules and JSON Schema as before.
+
+Keep every concept exactly as it is, including any conceptId values: those were matched to the vocabulary by a person. A new concept must use "conceptId": null. Keep negativeControls exactly as they are.
+
+## Problems
+
+${fixable.map((i) => `- ${i.level}${i.path ? ` at ${i.path}` : ""}: ${i.message}`).join("\n")}
+
+## Current Study IR
+
+\`\`\`json
+${JSON.stringify(ir, null, 1)}
 \`\`\`
 `;
 }

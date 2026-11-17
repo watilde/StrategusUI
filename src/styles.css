@@ -587,3 +587,55 @@ textarea.mono {
 .resolve .search-results {
   max-height: none;
 }
+
+.notice.info {
+  background: var(--info-bg);
+  color: var(--info);
+}
+
+.next-steps {
+  margin-top: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.checklist {
+  list-style: none;
+  margin: 4px 0;
+  padding: 0;
+}
+
+.checklist li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 4px 0;
+}
+
+.checklist li::before {
+  content: "";
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid var(--muted);
+}
+
+.checklist li.done {
+  color: var(--muted);
+}
+
+.checklist li.done::before {
+  border-color: var(--ok);
+  background: var(--ok);
+}
+
+.checklist li.todo::before {
+  border-color: var(--warning);
+}
+
+section:focus,
+aside:focus {
+  outline: none;
+}

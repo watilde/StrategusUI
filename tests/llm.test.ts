@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { EXAMPLE_DRAFT, QUESTION_PLACEHOLDER, buildPrompt, buildRepairPrompt, extractJson, parseDraft } from "../src/llm/prompt";
-import { StudyIRSchema, draftConcepts, draftStudyIRJsonSchema, isResolved, type DraftStudyIR } from "../src/ir/schema";
+import { EXAMPLE_DRAFT, QUESTION_PLACEHOLDER, buildFixPrompt, buildPrompt, buildRepairPrompt, extractJson, fixableIssues, parseDraft } from "../src/llm/prompt";
+import { StudyIRSchema, draftConcepts, draftStudyIRJsonSchema, isResolved, withPlaceholderConcepts, type DraftStudyIR } from "../src/ir/schema";
+import type { Issue } from "../src/validate/semantic";
 import { InMemoryVocabulary, type CompactVocabulary } from "../src/vocab/eunomiaSource";
 import { toConceptRef } from "../src/vocab/types";
 import { buildAnalysisSpecifications } from "../src/compiler/strategus";
@@ -114,5 +115,47 @@ describe("resolving a draft", () => {
     const ir = StudyIRSchema.parse(draft);
     expect(hasErrors(validateStudy(ir))).toBe(false);
     expect(buildAnalysisSpecifications(ir).moduleSpecifications).toHaveLength(2);
+  });
+});
+
+describe("checks on unresolved drafts", () => {
+  const check = (draft: DraftStudyIR) => validateStudy(StudyIRSchema.parse(withPlaceholderConcepts(draft)));
+
+  it("finds study-level problems before concepts are matched", () => {
+    const draft = structuredClone(EXAMPLE_DRAFT);
+    draft.timeAtRisk = { ...draft.timeAtRisk, riskWindowStart: 30, riskWindowEnd: 0, endAnchor: "cohort start" };
+    expect(check(draft).filter((i) => i.level === "error").map((i) => i.path)).toEqual(["timeAtRisk"]);
+  });
+
+  it("still detects the same term used for target and comparator", () => {
+    const draft = structuredClone(EXAMPLE_DRAFT);
+    draft.comparator = { ...draft.comparator, concepts: [{ conceptId: null, conceptName: "Celecoxib ", includeDescendants: true }] };
+    expect(check(draft).some((i) => i.level === "error" && i.path === "comparator")).toBe(true);
+  });
+
+  it("raises no false alarms for the example", () => {
+    expect(check(EXAMPLE_DRAFT).filter((i) => i.level === "error")).toEqual([]);
+  });
+});
+
+describe("fix prompt", () => {
+  const issues: Issue[] = [
+    { level: "error", path: "timeAtRisk", message: "Time-at-risk ends before it starts", source: "study" },
+    { level: "error", path: "target.concepts[0]", message: "not matched", source: "unresolved" },
+    { level: "warning", path: "negativeControls", message: "No negative controls", source: "negative-controls" },
+    { level: "warning", path: "target.concepts[0]", message: "name differs", source: "vocabulary" },
+    { level: "info", path: "population", message: "fyi", source: "study" },
+  ];
+
+  it("sends only study and schema problems the LLM can fix", () => {
+    expect(fixableIssues(issues).map((i) => i.path)).toEqual(["timeAtRisk"]);
+  });
+
+  it("includes the problems and the current IR, and asks to keep concepts", () => {
+    const p = buildFixPrompt(issues, EXAMPLE_DRAFT);
+    expect(p).toContain("- error at timeAtRisk: Time-at-risk ends before it starts");
+    expect(p).not.toContain("No negative controls");
+    expect(p).toContain("Keep every concept exactly as it is");
+    expect(parseDraft(p.slice(p.indexOf("## Current Study IR"))).ok).toBe(true);
   });
 });

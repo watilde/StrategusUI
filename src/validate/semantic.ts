@@ -5,7 +5,12 @@ import { excludedCovariateConceptIds, studyCohorts } from "../compiler/strategus
  * L2 semantic validation: rules that a JSON Schema cannot express.
  * "error" blocks export; "warning" and "info" are shown to the user.
  */
-export type Issue = { level: "error" | "warning" | "info"; path: string; message: string };
+/**
+ * `source` says which layer produced the issue. The LLM fix prompt only sends
+ * "study" issues: vocabulary matching and negative controls are a person's job.
+ */
+export type IssueSource = "schema" | "study" | "unresolved" | "vocabulary" | "negative-controls";
+export type Issue = { level: "error" | "warning" | "info"; path: string; message: string; source?: IssueSource };
 
 const EXPECTED_DOMAIN: Record<CohortSpec["kind"], string> = {
   drug_new_user: "Drug",
@@ -21,7 +26,8 @@ function conceptKey(c: CohortSpec): string {
 
 export function validateStudy(ir: StudyIR): Issue[] {
   const issues: Issue[] = [];
-  const add = (level: Issue["level"], path: string, message: string) => issues.push({ level, path, message });
+  const add = (level: Issue["level"], path: string, message: string) =>
+    issues.push({ level, path, message, source: path.startsWith("negativeControls") ? "negative-controls" : "study" });
 
   // Cohort IDs must be unique across study cohorts and negative controls.
   const seen = new Map<number, string>();

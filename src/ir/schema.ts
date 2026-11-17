@@ -216,3 +216,43 @@ export function draftConcepts(ir: DraftStudyIR): { path: string; cohortName: str
     cohort.concepts.map((concept, i) => ({ path: `${path}.concepts[${i}]`, cohortName: cohort.name, domainId: domainOf(cohort), concept })),
   );
 }
+
+/** Concept IDs at or above this are placeholders for unresolved terms (never real OMOP IDs). */
+export const PLACEHOLDER_CONCEPT_ID_BASE = 9_000_000_000_000;
+
+function termHash(term: string): number {
+  let h = 0;
+  for (const ch of term.trim().toLowerCase()) h = (h * 31 + ch.codePointAt(0)!) % 1_000_000_007;
+  return h;
+}
+
+/**
+ * Replaces unresolved concepts with placeholders so the study-level checks can
+ * run before every term is matched (e.g. to catch an inverted time at risk in an
+ * LLM draft right away). The same term always gets the same placeholder ID, so
+ * "target and comparator use the same concept set" is still detected.
+ * Never compile the result.
+ */
+export function withPlaceholderConcepts(ir: DraftStudyIR): unknown {
+  const fill = (cohort: DraftCohortSpec) => {
+    const domainId = cohort.kind === "drug_new_user" ? "Drug" : "Condition";
+    return {
+      ...cohort,
+      concepts: cohort.concepts.map((c) =>
+        isResolved(c)
+          ? c
+          : {
+              conceptId: PLACEHOLDER_CONCEPT_ID_BASE + termHash(c.conceptName),
+              conceptName: c.conceptName,
+              domainId,
+              vocabularyId: "(unresolved)",
+              conceptClassId: "",
+              conceptCode: "",
+              standardConcept: "S" as const,
+              includeDescendants: c.includeDescendants,
+            },
+      ),
+    };
+  };
+  return { ...ir, target: fill(ir.target), comparator: fill(ir.comparator), outcomes: ir.outcomes.map(fill) };
+}

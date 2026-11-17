@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 
-export function Section({ title, children, hint }: { title: string; children: ReactNode; hint?: string }) {
+export function Section({ title, children, hint, id }: { title: string; children: ReactNode; hint?: string; id?: string }) {
   return (
-    <section className="section">
+    <section className="section" id={id} tabIndex={id ? -1 : undefined}>
       <h2>{title}</h2>
       {hint && <p className="hint">{hint}</p>}
       {children}

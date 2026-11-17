@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { CmPresetSchema, StudyIRSchema, draftConcepts, isResolved, type CmPreset, type DraftCohortSpec, type DraftStudyIR } from "./ir/schema";
+import { CmPresetSchema, StudyIRSchema, draftConcepts, isResolved, withPlaceholderConcepts, type CmPreset, type DraftCohortSpec, type DraftStudyIR } from "./ir/schema";
 import { gibleed } from "./ir/presets/gibleed";
 import { buildAnalysisSpecifications } from "./compiler/strategus";
 import { buildRScript } from "./compiler/rScriptBundled";
@@ -42,25 +42,25 @@ export function App() {
   useEffect(useDemoVocabulary, []);
 
   const { issues, specJson, rScript } = useMemo(() => {
-    // Unresolved concepts (from an LLM draft) must be matched to the vocabulary first.
+    const schemaIssues = (error: { issues: { path: PropertyKey[]; message: string }[] }): Issue[] =>
+      error.issues.map((i) => ({ level: "error", path: i.path.map(String).join("."), message: i.message, source: "schema" }));
+
+    // Unresolved concepts (from an LLM draft) must be matched to the vocabulary
+    // before compiling, but the study-level checks already run on placeholders.
     const unresolved = draftConcepts(ir).filter((x) => !isResolved(x.concept));
     if (unresolved.length > 0) {
       const unresolvedIssues: Issue[] = unresolved.map((u) => ({
         level: "error",
         path: u.path,
         message: `“${u.concept.conceptName}” (${u.cohortName}) is not matched to a vocabulary concept yet`,
+        source: "unresolved",
       }));
-      return { issues: unresolvedIssues, specJson: null, rScript: null };
+      const placeholder = StudyIRSchema.safeParse(withPlaceholderConcepts(ir));
+      const rest = placeholder.success ? validateStudy(placeholder.data) : schemaIssues(placeholder.error);
+      return { issues: [...unresolvedIssues, ...rest], specJson: null, rScript: null };
     }
     const parsed = StudyIRSchema.safeParse(ir);
-    if (!parsed.success) {
-      const schemaIssues: Issue[] = parsed.error.issues.map((i) => ({
-        level: "error",
-        path: i.path.join("."),
-        message: i.message,
-      }));
-      return { issues: schemaIssues, specJson: null, rScript: null };
-    }
+    if (!parsed.success) return { issues: schemaIssues(parsed.error), specJson: null, rScript: null };
     const issues = validateStudy(parsed.data);
     return {
       issues,
@@ -142,7 +142,7 @@ export function App() {
 
       <main className="layout">
         <form className="form" onSubmit={(e) => e.preventDefault()}>
-          <LlmDraftPanel onLoad={setIr} />
+          <LlmDraftPanel ir={ir} issues={allIssues} onLoad={setIr} />
 
           <VocabularyPanel vocabulary={vocabulary} onUseDemo={useDemoVocabulary} onOpenAthena={openAthena} />
 
@@ -258,12 +258,12 @@ export function App() {
             ))}
           </Section>
 
-          <Section title="Negative controls">
+          <Section title="Negative controls" id="section-negative-controls">
             <NegativeControlEditor ir={ir} vocabulary={vocabulary} onChange={(negativeControls) => update({ negativeControls })} />
           </Section>
         </form>
 
-        <aside className="side">
+        <aside className="side" id="output" tabIndex={-1}>
           <OutputPanel issues={allIssues} specJson={specJson} rScript={rScript} irJson={irJson} blocked={hasErrors(allIssues) || specJson === null} />
           <p className="hint footnote">
             Templates: Strategus {templates.strategus.strategusVersion} / CohortMethod {templates.modules.CohortMethodModule.modulePackageVersion} /

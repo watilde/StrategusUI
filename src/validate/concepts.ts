@@ -87,5 +87,5 @@ export function checkConcepts(
 
 export async function validateConcepts(ir: StudyIR, vocabulary: VocabularySource): Promise<Issue[]> {
   const found = await vocabulary.getConcepts(conceptUses(ir).map((u) => u.conceptId));
-  return checkConcepts(ir, found, vocabulary);
+  return checkConcepts(ir, found, vocabulary).map((i) => ({ ...i, source: "vocabulary" as const }));
 }

@@ -25,7 +25,9 @@ LLM (copy-paste) / form ──► Study IR (Zod) ──► TypeScript compiler �
   template. You paste the reply back; the app extracts the JSON, validates it, and if it is invalid generates a
   repair prompt listing the problems. The LLM is told never to write concept IDs: it writes clinical terms, and a
   person matches each one to a vocabulary concept from a short list of candidates. Negative controls are left to
-  the person as well.
+  the person as well. The loop is short: pasting a reply loads it; repair and fix prompts clear the reply box for
+  the next paste; study-level checks run on placeholders before the terms are matched, so a "fix prompt" can send
+  problems such as an inverted time at risk straight back to the LLM; a checklist shows what is left.
 - **The compiler** (`src/compiler/strategus.ts`, `src/cohorts/circe.ts`) is deterministic.
   It never invents CohortMethod / FeatureExtraction / Cyclops defaults: the full settings of each
   analysis preset come from `src/compiler/templates/cm-templates.json`, which is generated from the
@@ -96,7 +98,7 @@ Enable it once under **Settings → Pages → Source: GitHub Actions**.
    descendant preview; concept checks
 3. ✅ LLM, copy-paste mode: prompt (copy or download as a template) → paste the reply → validate → repair prompt;
    terms resolved to concepts by a person
-4. Smoother copy-paste loop (fewer steps between prompt, reply, repair and reload)
+4. ✅ Smoother copy-paste loop: load on paste, repair and fix prompts that reset the reply box, next-steps checklist, undo
 5. OHDSI PhenotypeLibrary reuse; CohortDiagnostics module
 
 ## Limitations
