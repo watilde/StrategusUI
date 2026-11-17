@@ -1,0 +1,32 @@
+{
+  "name": "strategus-ui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "PICO-to-Strategus UI: build OHDSI Strategus analysis specifications in the browser",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc",
+    "test": "vitest run",
+    "fixtures:export": "tsx scripts/export-fixtures.ts",
+    "golden:compare": "tsx scripts/compare-golden.ts",
+    "templates:extract": "tsx scripts/extract-templates.ts"
+  },
+  "dependencies": {
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0"
+  }
+}
