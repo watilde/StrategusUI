@@ -20,7 +20,9 @@ export type PackageIdentity = {
 export type Templates = {
   source: { generatedBy: string; generatedAt: string; packages: Record<string, string> };
   strategus: { strategusVersion: string; strategusPackageHash: string };
-  modules: { CohortGeneratorModule: PackageIdentity; CohortMethodModule: PackageIdentity };
+  modules: { CohortGeneratorModule: PackageIdentity; CohortMethodModule: PackageIdentity; CohortDiagnosticsModule: PackageIdentity };
+  /** Full CohortDiagnostics module settings (no IR-driven fields). */
+  cohortDiagnosticsSettings: JsonObject;
   cmAnalysesSpecifications: JsonObject;
   cmAnalyses: Record<CmPreset, JsonObject>;
 };

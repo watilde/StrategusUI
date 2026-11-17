@@ -26,7 +26,7 @@ for (fixtureDir in args) {
   reloaded <- ParallelLogger::loadSettingsFromJson(file.path(fixtureDir, "spec.r.json"))
   stopifnot(inherits(reloaded, "AnalysisSpecifications"))
 
-  pkgs <- c("Strategus", "CohortMethod", "CohortGenerator", "FeatureExtraction", "CirceR", "Cyclops")
+  pkgs <- c("Strategus", "CohortMethod", "CohortGenerator", "CohortDiagnostics", "FeatureExtraction", "CirceR", "Cyclops")
   info <- lapply(pkgs, function(p) as.character(utils::packageVersion(p)))
   names(info) <- pkgs
   jsonlite::write_json(info, file.path(fixtureDir, "packages.json"), auto_unbox = TRUE, pretty = TRUE)

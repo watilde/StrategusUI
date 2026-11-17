@@ -106,6 +106,12 @@ buildSpecFromIr <- function(ir, cohortJson) {
   }
   spec <- addModuleSpecifications(spec, cgModule$createModuleSpecifications(generateStats = TRUE))
 
+  # ---- CohortDiagnostics (optional; package defaults, all cohorts) ---------
+  if (isTRUE(ir$cohortDiagnostics$enabled)) {
+    cdModule <- CohortDiagnosticsModule$new()
+    spec <- addModuleSpecifications(spec, cdModule$createModuleSpecifications())
+  }
+
   # ---- CohortMethod -------------------------------------------------------
   ncOutcomes <- lapply(ncs, function(x) {
     CohortMethod::createOutcome(

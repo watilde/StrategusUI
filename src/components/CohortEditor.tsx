@@ -1,9 +1,10 @@
 import { Fragment, useState } from "react";
-import { isResolved, type ConceptRef, type DraftCohortSpec, type DraftConcept } from "../ir/schema";
+import { isResolved, type ConceptRef, type DraftCohortSpec, type DraftConcept, type DraftOutcomeCohort } from "../ir/schema";
 import { toConceptRef, type VocabularySource } from "../vocab/types";
 import { ConceptSearch } from "./ConceptSearch";
 import { DescendantPreview } from "./DescendantPreview";
 import { ResolveConcept } from "./ResolveConcept";
+import { PhenotypeCard, PhenotypePicker, PhenotypeSuggestions } from "./Phenotypes";
 import { Checkbox, Field, NumberInput, Select } from "./fields";
 
 const KIND_LABEL: Record<DraftCohortSpec["kind"], string> = {
@@ -53,20 +54,53 @@ function ManualConcept({ domainId, onAdd }: { domainId: string; onAdd: (c: Conce
   );
 }
 
+/**
+ * Edits a cohort. Outcomes (allowPhenotype) can also be a published
+ * PhenotypeLibrary definition instead of a template cohort.
+ */
 export function CohortEditor({
-  cohort,
+  cohort: anyCohort,
   vocabulary,
   onChange,
   onRemove,
+  allowPhenotype = false,
 }: {
-  cohort: DraftCohortSpec;
+  cohort: DraftOutcomeCohort;
   vocabulary: VocabularySource | null;
-  onChange: (c: DraftCohortSpec) => void;
+  onChange: (c: DraftOutcomeCohort) => void;
   onRemove?: () => void;
+  allowPhenotype?: boolean;
 }) {
-  const domain = KIND_DOMAIN[cohort.kind];
   const [preview, setPreview] = useState<number | null>(null);
+
+  if (anyCohort.kind === "phenotype") {
+    return (
+      <div className="cohort">
+        <div className="row">
+          <Field label="Cohort name">
+            <input value={anyCohort.name} onChange={(e) => onChange({ ...anyCohort, name: e.target.value })} />
+          </Field>
+          <Field label="cohortId">
+            <NumberInput value={anyCohort.cohortId} min={1} onChange={(v) => onChange({ ...anyCohort, cohortId: v ?? 1 })} />
+          </Field>
+          {onRemove && (
+            <button type="button" className="ghost danger" onClick={onRemove} aria-label="Remove cohort">
+              Remove
+            </button>
+          )}
+        </div>
+        <PhenotypeCard
+          cohort={anyCohort}
+          onReplace={() => onChange({ kind: "condition_first", cohortId: anyCohort.cohortId, name: anyCohort.name, concepts: [] })}
+        />
+      </div>
+    );
+  }
+
+  const cohort: DraftCohortSpec = anyCohort;
+  const domain = KIND_DOMAIN[cohort.kind];
   const setConcepts = (concepts: DraftConcept[]) => onChange({ ...cohort, concepts });
+  const firstUnresolved = cohort.concepts.find((c) => !isResolved(c));
 
   return (
     <div className="cohort">
@@ -213,6 +247,16 @@ export function CohortEditor({
         onPick={(c) => setConcepts([...cohort.concepts, toConceptRef(c)])}
       />
       <ManualConcept domainId={domain} onAdd={(c: ConceptRef) => setConcepts([...cohort.concepts, c])} />
+      {allowPhenotype && firstUnresolved && (
+        <PhenotypeSuggestions term={firstUnresolved.conceptName} cohortId={cohort.cohortId} onUse={onChange} />
+      )}
+      {allowPhenotype && (
+        <PhenotypePicker
+          initialText={firstUnresolved?.conceptName ?? cohort.concepts[0]?.conceptName ?? cohort.name}
+          cohortId={cohort.cohortId}
+          onUse={onChange}
+        />
+      )}
       {cohort.concepts.length > 1 && (
         <Checkbox
           checked={cohort.concepts.every((c) => c.includeDescendants)}

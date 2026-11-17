@@ -67,55 +67,9 @@ export const gibleedInput: StudyIRInput = {
     analyses: ["unadjusted", "ps_match_1to1"],
     excludedCovariateConceptIds: [],
   },
+  cohortDiagnostics: { enabled: true },
 };
 
 export const gibleed: StudyIR = StudyIRSchema.parse(gibleedInput);
 
-/** Same study with every CM preset enabled; used to (re)generate templates from R. */
-export const allPresets: StudyIR = StudyIRSchema.parse({
-  ...gibleedInput,
-  title: "All CohortMethod presets (template source)",
-  cohortMethod: { analyses: ["unadjusted", "ps_match_1to1", "ps_stratify_10"], excludedCovariateConceptIds: [] },
-});
-
-/**
- * Changes every IR-driven field (TAR, population, presets order, exclusions,
- * multiple outcomes, no negative controls) so CI exercises the compiler beyond
- * the template source.
- */
-export const variant: StudyIR = StudyIRSchema.parse({
-  ...gibleedInput,
-  title: "Variant (compiler coverage)",
-  target: { ...gibleedInput.target, eraGapDays: 0 },
-  outcomes: [
-    ...gibleedInput.outcomes,
-    {
-      kind: "condition_first",
-      cohortId: 4,
-      name: "GI bleed (exact concept)",
-      concepts: [{ ...EUNOMIA_CONCEPTS.giHemorrhage, includeDescendants: false }],
-    },
-  ],
-  negativeControls: [],
-  population: {
-    washoutDays: 365,
-    firstExposureOnly: false,
-    removeDuplicateSubjects: "keep first",
-    restrictToCommonPeriod: false,
-    minAge: 18,
-    maxAge: 85,
-    studyStartDate: "20100101",
-    studyEndDate: "",
-    maxCohortSize: 0,
-  },
-  timeAtRisk: {
-    riskWindowStart: 1,
-    startAnchor: "cohort start",
-    riskWindowEnd: 365,
-    endAnchor: "cohort start",
-    minDaysAtRisk: 0,
-  },
-  cohortMethod: { analyses: ["ps_stratify_10", "unadjusted"], excludedCovariateConceptIds: [1118084] },
-});
-
-export const PRESETS = { gibleed, allPresets, variant } as const;
+export const PRESETS = { gibleed } as const;

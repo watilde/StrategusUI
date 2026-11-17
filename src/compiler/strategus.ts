@@ -1,4 +1,4 @@
-import type { CohortSpec, StudyIR } from "../ir/schema";
+import type { AnyCohort, StudyIR } from "../ir/schema";
 import { toCirceJson } from "../cohorts/circe";
 import { templates as defaultTemplates, type Json, type JsonObject, type Templates } from "./templates";
 
@@ -9,7 +9,7 @@ import { templates as defaultTemplates, type Json, type JsonObject, type Templat
  * Mirrors r/strategus-from-ir.R. CI checks that both produce equivalent JSON.
  */
 
-export function studyCohorts(ir: StudyIR): CohortSpec[] {
+export function studyCohorts(ir: StudyIR): AnyCohort[] {
   return [ir.target, ir.comparator, ...ir.outcomes];
 }
 
@@ -55,6 +55,18 @@ function cmAnalysis(ir: StudyIR, analysisId: number, preset: keyof Templates["cm
     endAnchor: tar.endAnchor,
   };
   return analysis;
+}
+
+function cohortDiagnosticsModule(t: Templates): JsonObject {
+  if (!t.modules.CohortDiagnosticsModule || !t.cohortDiagnosticsSettings) {
+    throw new Error("No CohortDiagnostics template; run npm run templates:extract");
+  }
+  return {
+    module: "CohortDiagnosticsModule",
+    settings: clone(t.cohortDiagnosticsSettings),
+    ...t.modules.CohortDiagnosticsModule,
+    attr_class: ["ModuleSpecifications", "CohortDiagnosticsModuleSpecifications"],
+  };
 }
 
 export function buildAnalysisSpecifications(ir: StudyIR, t: Templates = defaultTemplates): JsonObject {
@@ -133,6 +145,7 @@ export function buildAnalysisSpecifications(ir: StudyIR, t: Templates = defaultT
         ...t.modules.CohortGeneratorModule,
         attr_class: ["ModuleSpecifications", "CohortGeneratorModuleSpecifications"],
       },
+      ...(ir.cohortDiagnostics.enabled ? [cohortDiagnosticsModule(t)] : []),
       {
         module: "CohortMethodModule",
         settings: { cmAnalysesSpecifications },

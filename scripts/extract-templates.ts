@@ -8,7 +8,7 @@
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { allPresets } from "../src/ir/presets/gibleed";
+import { allPresets } from "../src/ir/presets/fixtures";
 import type { JsonObject, Templates } from "../src/compiler/templates";
 
 const root = join(import.meta.dirname, "..");
@@ -29,6 +29,7 @@ const identity = (m: JsonObject) => ({
 });
 
 const cg = findModule("CohortGeneratorModule");
+const cd = findModule("CohortDiagnosticsModule");
 const cm = findModule("CohortMethodModule");
 const cmSpecs = (cm.settings as JsonObject).cmAnalysesSpecifications as JsonObject;
 const analysisList = cmSpecs.cmAnalysisList as JsonObject[];
@@ -55,7 +56,9 @@ const templates: Templates = {
   modules: {
     CohortGeneratorModule: identity(cg),
     CohortMethodModule: identity(cm),
+    CohortDiagnosticsModule: identity(cd),
   },
+  cohortDiagnosticsSettings: cd.settings as JsonObject,
   cmAnalysesSpecifications,
   cmAnalyses,
 };

@@ -45,4 +45,10 @@ print(cmResults[cmResults$outcome_id %in% outcomeIds, c(
   "target_subjects", "comparator_subjects", "target_outcomes", "comparator_outcomes"
 )])
 stopifnot(nrow(cmResults) > 0)
+cdDir <- file.path(resultsDir, "CohortDiagnosticsModule")
+if (dir.exists(cdDir)) {
+  cdCounts <- read.csv(file.path(cdDir, "cd_cohort_count.csv"))
+  print(cdCounts)
+  stopifnot(nrow(cdCounts) > 0)
+}
 message("Eunomia execution OK: ", outputDir)

@@ -62,7 +62,38 @@ export const AnchorSchema = z.enum(["cohort start", "cohort end"]);
 export const CmPresetSchema = z.enum(["unadjusted", "ps_match_1to1", "ps_stratify_10"]);
 export type CmPreset = z.infer<typeof CmPresetSchema>;
 
-function makeSchemas<C extends z.ZodType>(concept: C) {
+/**
+ * An outcome defined by an existing, published Circe cohort definition (for now
+ * from the OHDSI PhenotypeLibrary) instead of a template. The definition is
+ * embedded so the IR stays self-contained and reproducible.
+ */
+export const PhenotypeCohortSchema = z
+  .object({
+    cohortId: z.number().int().positive(),
+    name: z.string().min(1),
+    kind: z.literal("phenotype"),
+    phenotype: z.object({
+      library: z.string().min(1),
+      version: z.string().min(1),
+      id: z.number().int().positive(),
+      name: z.string().min(1),
+    }),
+    circe: z
+      .record(z.string(), z.unknown())
+      .refine((c) => typeof c.PrimaryCriteria === "object" && c.PrimaryCriteria !== null && Array.isArray(c.ConceptSets), {
+        message: "Not a Circe cohort definition (needs PrimaryCriteria and ConceptSets)",
+      }),
+  })
+  .describe("Outcome defined by a published cohort definition (OHDSI PhenotypeLibrary).");
+export type PhenotypeCohort = z.infer<typeof PhenotypeCohortSchema>;
+
+export const CohortDiagnosticsSettingsSchema = z
+  .object({
+    enabled: z.boolean().default(false).describe("Run CohortDiagnostics on all cohorts. Recommended."),
+  })
+  .default({ enabled: false });
+
+function makeSchemas<C extends z.ZodType>(concept: C, { phenotypeOutcomes }: { phenotypeOutcomes: boolean }) {
   const cohortBase = {
     cohortId: z.number().int().positive(),
     name: z.string().min(1),
@@ -85,6 +116,7 @@ function makeSchemas<C extends z.ZodType>(concept: C) {
     .describe("First occurrence of a condition (one-day cohort).");
 
   const cohort = z.discriminatedUnion("kind", [drugNewUser, conditionFirst]);
+  const outcomeCohort = phenotypeOutcomes ? z.discriminatedUnion("kind", [drugNewUser, conditionFirst, PhenotypeCohortSchema]) : cohort;
 
   const study = z.object({
     irVersion: z.literal(IR_VERSION),
@@ -102,7 +134,7 @@ function makeSchemas<C extends z.ZodType>(concept: C) {
       .default({ population: "", intervention: "", comparison: "", outcome: "" }),
     target: cohort.describe("Intervention (I): usually a drug_new_user cohort."),
     comparator: cohort.describe("Comparison (C): usually a drug_new_user cohort."),
-    outcomes: z.array(cohort).min(1).describe("Outcomes (O): usually condition_first cohorts."),
+    outcomes: z.array(outcomeCohort).min(1).describe("Outcomes (O): usually condition_first cohorts."),
     negativeControls: z.array(NegativeControlSchema).default([]),
     negativeControlSettings: z
       .object({
@@ -140,15 +172,16 @@ function makeSchemas<C extends z.ZodType>(concept: C) {
         .default([])
         .describe("Leave empty: the target and comparator concepts are excluded automatically."),
     }),
+    cohortDiagnostics: CohortDiagnosticsSettingsSchema,
   });
 
-  return { drugNewUser, conditionFirst, cohort, study };
+  return { drugNewUser, conditionFirst, cohort, outcomeCohort, study };
 }
 
-const resolved = makeSchemas(ConceptRefSchema);
-const draft = makeSchemas(DraftConceptSchema);
-/** What the LLM is asked to write: concepts are always unresolved. */
-const llm = makeSchemas(UnresolvedConceptSchema);
+const resolved = makeSchemas(ConceptRefSchema, { phenotypeOutcomes: true });
+const draft = makeSchemas(DraftConceptSchema, { phenotypeOutcomes: true });
+/** What the LLM is asked to write: unresolved concepts only, no phenotype IDs to guess. */
+const llm = makeSchemas(UnresolvedConceptSchema, { phenotypeOutcomes: false });
 // Named, shared definitions ($defs) in generated JSON Schemas. Merged into the
 // global registry so descriptions set with .describe() are kept.
 for (const [schema, id] of [
@@ -161,8 +194,13 @@ for (const [schema, id] of [
 
 export const DrugNewUserCohortSchema = resolved.drugNewUser;
 export const ConditionFirstCohortSchema = resolved.conditionFirst;
+/** Target / comparator cohorts. */
 export const CohortSpecSchema = resolved.cohort;
 export type CohortSpec = z.infer<typeof CohortSpecSchema>;
+/** Outcome cohorts: template cohorts or published phenotypes. */
+export const OutcomeCohortSchema = resolved.outcomeCohort;
+export type OutcomeCohort = z.infer<typeof OutcomeCohortSchema>;
+export type AnyCohort = CohortSpec | OutcomeCohort;
 
 export const StudyIRSchema = resolved.study;
 export type StudyIR = z.infer<typeof StudyIRSchema>;
@@ -170,6 +208,13 @@ export type StudyIRInput = z.input<typeof StudyIRSchema>;
 
 export const DraftCohortSpecSchema = draft.cohort;
 export type DraftCohortSpec = z.infer<typeof DraftCohortSpecSchema>;
+export const DraftOutcomeCohortSchema = draft.outcomeCohort;
+export type DraftOutcomeCohort = z.infer<typeof DraftOutcomeCohortSchema>;
+
+/** Concepts of a template cohort; phenotype cohorts carry theirs inside the Circe definition. */
+export function cohortConcepts<T extends { kind: string; concepts?: unknown[] }>(c: T): NonNullable<T["concepts"]> {
+  return (c.kind === "phenotype" ? [] : (c.concepts ?? [])) as NonNullable<T["concepts"]>;
+}
 export const DraftStudyIRSchema = draft.study;
 export type DraftStudyIR = z.infer<typeof DraftStudyIRSchema>;
 
@@ -210,7 +255,7 @@ export function draftConcepts(ir: DraftStudyIR): { path: string; cohortName: str
   const cohorts: [string, DraftCohortSpec][] = [
     ["target", ir.target],
     ["comparator", ir.comparator],
-    ...ir.outcomes.map((o, i): [string, DraftCohortSpec] => [`outcomes[${i}]`, o]),
+    ...ir.outcomes.flatMap((o, i): [string, DraftCohortSpec][] => (o.kind === "phenotype" ? [] : [[`outcomes[${i}]`, o]])),
   ];
   return cohorts.flatMap(([path, cohort]) =>
     cohort.concepts.map((concept, i) => ({ path: `${path}.concepts[${i}]`, cohortName: cohort.name, domainId: domainOf(cohort), concept })),
@@ -254,5 +299,10 @@ export function withPlaceholderConcepts(ir: DraftStudyIR): unknown {
       ),
     };
   };
-  return { ...ir, target: fill(ir.target), comparator: fill(ir.comparator), outcomes: ir.outcomes.map(fill) };
+  return {
+    ...ir,
+    target: fill(ir.target),
+    comparator: fill(ir.comparator),
+    outcomes: ir.outcomes.map((o) => (o.kind === "phenotype" ? o : fill(o))),
+  };
 }

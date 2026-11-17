@@ -102,6 +102,7 @@ describe("resolving a draft", () => {
 
     // Simulates a person taking the top candidate for each term.
     for (const cohort of [draft.target, draft.comparator, ...draft.outcomes]) {
+      if (cohort.kind === "phenotype") continue;
       const domainId = cohort.kind === "drug_new_user" ? "Drug" : "Condition";
       for (let i = 0; i < cohort.concepts.length; i++) {
         const c = cohort.concepts[i];
@@ -114,7 +115,11 @@ describe("resolving a draft", () => {
     expect(draftConcepts(draft).every((x) => isResolved(x.concept))).toBe(true);
     const ir = StudyIRSchema.parse(draft);
     expect(hasErrors(validateStudy(ir))).toBe(false);
-    expect(buildAnalysisSpecifications(ir).moduleSpecifications).toHaveLength(2);
+    expect((buildAnalysisSpecifications(ir).moduleSpecifications as { module: string }[]).map((m) => m.module)).toEqual([
+      "CohortGeneratorModule",
+      "CohortDiagnosticsModule",
+      "CohortMethodModule",
+    ]);
   });
 });
 

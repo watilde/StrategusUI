@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { StudyIRSchema, studyIRJsonSchema, type StudyIR } from "../src/ir/schema";
-import { PRESETS, gibleed } from "../src/ir/presets/gibleed";
+import { gibleed } from "../src/ir/presets/gibleed";
+import { FIXTURES as PRESETS } from "../src/ir/presets/fixtures";
 import { hasErrors, validateStudy } from "../src/validate/semantic";
 import { EUNOMIA_CONCEPTS } from "../src/vocab/eunomia";
 

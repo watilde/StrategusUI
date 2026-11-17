@@ -1,5 +1,6 @@
 import type { CohortSpec, StudyIR } from "../ir/schema";
 import { excludedCovariateConceptIds, studyCohorts } from "../compiler/strategus";
+import { circeEntryConcepts } from "../cohorts/circeConcepts";
 
 /**
  * L2 semantic validation: rules that a JSON Schema cannot express.
@@ -48,7 +49,8 @@ export function validateStudy(ir: StudyIR): Issue[] {
   const cohortPaths: [CohortSpec, string][] = [
     [ir.target, "target"],
     [ir.comparator, "comparator"],
-    ...ir.outcomes.map((o, i): [CohortSpec, string] => [o, `outcomes[${i}]`]),
+    // Phenotype outcomes are published definitions; their concepts are not checked here.
+    ...ir.outcomes.flatMap((o, i): [CohortSpec, string][] => (o.kind === "phenotype" ? [] : [[o, `outcomes[${i}]`]])),
   ];
   for (const [cohort, path] of cohortPaths) {
     const expected = EXPECTED_DOMAIN[cohort.kind];
@@ -89,7 +91,9 @@ export function validateStudy(ir: StudyIR): Issue[] {
   } else if (ir.negativeControls.length < 5) {
     add("info", "negativeControls", `Only ${ir.negativeControls.length} negative controls; dozens are usually recommended for calibration`);
   }
-  const outcomeConceptIds = new Set(ir.outcomes.flatMap((o) => o.concepts.map((c) => c.conceptId)));
+  const outcomeConceptIds = new Set(
+    ir.outcomes.flatMap((o) => (o.kind === "phenotype" ? circeEntryConcepts(o.circe) : o.concepts).map((c) => c.conceptId)),
+  );
   ir.negativeControls.forEach((n, i) => {
     if (outcomeConceptIds.has(n.outcomeConceptId)) {
       add("error", `negativeControls[${i}]`, `${n.name} uses the same concept as an outcome of interest`);

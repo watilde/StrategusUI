@@ -4,3 +4,4 @@ fixtures/out/
 *.log
 .Rhistory
 .Rproj.user/
+public/phenotypes/

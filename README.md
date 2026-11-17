@@ -5,8 +5,9 @@
 From a PICO question to an [OHDSI Strategus](https://github.com/OHDSI/Strategus) analysis specification, built in the browser.
 It is a static site (GitHub Pages): no server, and nothing you enter leaves your browser.
 
-Current scope: comparative cohort studies with **CohortGenerator + CohortMethod**, drafted with any LLM through a
-copy-paste prompt (or entered through the form), with concept search over a vocabulary. The Eunomia GiBleed example (celecoxib vs diclofenac → GI bleed) is built in.
+Current scope: comparative cohort studies with **CohortGenerator + CohortDiagnostics + CohortMethod**, drafted with any
+LLM through a copy-paste prompt (or entered through the form), with concept search over a vocabulary and outcomes that
+can reuse published definitions from the OHDSI PhenotypeLibrary. The Eunomia GiBleed example (celecoxib vs diclofenac → GI bleed) is built in.
 
 ## Architecture
 
@@ -45,6 +46,14 @@ LLM (copy-paste) / form ──► Study IR (Zod) ──► TypeScript compiler �
   Both sources share one definition of search (`src/vocab/search.ts`): concept ID, exact code, or all tokens in the
   name or a synonym, ranked identically. Tests run the DuckDB SQL on native DuckDB and require the same results as
   the in-memory search.
+- **Published outcome definitions** (`src/phenotypes/`). An outcome can be a cohort definition from the
+  [OHDSI PhenotypeLibrary](https://github.com/OHDSI/PhenotypeLibrary) (Apache License) instead of a template. The
+  library is fetched at build time from a pinned release (`npm run phenotypes:fetch`, v3.37.0) and served from this
+  site; withdrawn and deprecated definitions are left out. The definition is embedded in the IR and compiled exactly
+  as published. Search runs over names and descriptions, and an unresolved outcome term from an LLM draft also gets
+  matching definitions as suggestions. Target and comparator stay template new-user cohorts.
+- **CohortDiagnostics** is an on/off switch: the module (package defaults, all cohorts) is added before CohortMethod,
+  from an R-generated template like the CohortMethod presets.
 - **Validation layers**
   1. Zod schema (`StudyIRSchema`)
   2. Semantic rules (`src/validate/semantic.ts`): duplicate IDs, domain mismatches, time at risk, negative controls, …
@@ -59,6 +68,7 @@ LLM (copy-paste) / form ──► Study IR (Zod) ──► TypeScript compiler �
 npm install
 npm run dev        # http://localhost:5173/StrategusUI/
 npm test           # includes TypeScript-vs-R comparison against tests/golden/*.spec.r.json
+npm run phenotypes:fetch   # once: PhenotypeLibrary definitions into public/phenotypes/ (not committed)
 npm run build      # static site in dist/
 ```
 
@@ -99,11 +109,14 @@ Enable it once under **Settings → Pages → Source: GitHub Actions**.
 3. ✅ LLM, copy-paste mode: prompt (copy or download as a template) → paste the reply → validate → repair prompt;
    terms resolved to concepts by a person
 4. ✅ Smoother copy-paste loop: load on paste, repair and fix prompts that reset the reply box, next-steps checklist, undo
-5. OHDSI PhenotypeLibrary reuse; CohortDiagnostics module
+5. ✅ OHDSI PhenotypeLibrary definitions for outcomes; CohortDiagnostics module
 
 ## Limitations
 
-- Cohorts are template-based: new users of a drug (first drug era) and first occurrence of a condition.
+- Target and comparator are template cohorts (new users of a drug, first occurrence of a condition); published
+  definitions are available for outcomes only.
+- Most PhenotypeLibrary definitions are pending peer review; read a definition before using it.
+- CohortDiagnostics runs with the package defaults; its settings are not editable.
 - The demo vocabulary is the small Eunomia subset; it has almost no hierarchy, so descendant previews need an Athena vocabulary.
 - Source codes (ICD-10-CM, NDC, …) are not yet mapped to standard concepts (`CONCEPT_RELATIONSHIP` "Maps to").
 - The descendant preview scans `CONCEPT_ANCESTOR` on demand; with a full vocabulary this takes a while.

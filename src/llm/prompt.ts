@@ -66,6 +66,7 @@ export const EXAMPLE_DRAFT: DraftStudyIR = DraftStudyIRSchema.parse({
     minDaysAtRisk: 1,
   },
   cohortMethod: { analyses: ["unadjusted", "ps_match_1to1"], excludedCovariateConceptIds: [] },
+  cohortDiagnostics: { enabled: true },
 });
 
 const RULES = `1. Reply with exactly one JSON object that validates against the JSON Schema below. No other text. A \`\`\`json code fence is fine.
@@ -74,6 +75,7 @@ const RULES = `1. Reply with exactly one JSON object that validates against the 
    - Conditions: the SNOMED-style English name (e.g. "Gastrointestinal hemorrhage", "Type 2 diabetes mellitus").
    The app looks these terms up in the OMOP vocabulary and a person confirms each match.
 3. design is "cohort_method". target and comparator are "drug_new_user" cohorts; outcomes are "condition_first" cohorts.
+   (The person may later replace an outcome with a published phenotype definition in the app; do not try to do that yourself.)
 4. cohortId: target 1, comparator 2, outcomes 3, 4, 5, ...
 5. negativeControls: always []. They are selected later in the app.
 6. cohortMethod.excludedCovariateConceptIds: always [].
@@ -83,6 +85,7 @@ const RULES = `1. Reply with exactly one JSON object that validates against the 
    - timeAtRisk (on-treatment): riskWindowStart 1 "cohort start", riskWindowEnd 0 "cohort end", minDaysAtRisk 1
      For an intention-to-treat style question use riskWindowEnd 365 (or the stated follow-up) with endAnchor "cohort start".
    - cohortMethod.analyses: ["unadjusted", "ps_match_1to1"]
+   - cohortDiagnostics: {"enabled": true}
 8. Fill pico with short phrases and give the study a short title.
 9. If the question is ambiguous or cannot be fully expressed (for example no comparator is given), choose the most conventional option and explain it in "description".`;
 

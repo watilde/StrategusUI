@@ -12,7 +12,8 @@
     "test": "vitest run",
     "fixtures:export": "tsx scripts/export-fixtures.ts",
     "golden:compare": "tsx scripts/compare-golden.ts",
-    "templates:extract": "tsx scripts/extract-templates.ts"
+    "templates:extract": "tsx scripts/extract-templates.ts",
+    "phenotypes:fetch": "tsx scripts/fetch-phenotypes.ts"
   },
   "dependencies": {
     "@duckdb/duckdb-wasm": "1.33.1-dev57.0",

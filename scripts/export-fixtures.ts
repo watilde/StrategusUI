@@ -8,7 +8,7 @@
  */
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { PRESETS } from "../src/ir/presets/gibleed";
+import { FIXTURES as PRESETS } from "../src/ir/presets/fixtures";
 import { buildAnalysisSpecifications, cohortDefinitionFiles } from "../src/compiler/strategus";
 import { templates } from "../src/compiler/templates";
 import { buildRScriptFrom } from "../src/compiler/rScript";
@@ -27,8 +27,15 @@ for (const [name, ir] of Object.entries(PRESETS)) {
   for (const [id, json] of Object.entries(cohortDefinitionFiles(ir))) {
     writeFileSync(join(dir, "cohorts", `${id}.json`), json);
   }
-  if (templatesReady) {
-    writeFileSync(join(dir, "spec.ts.json"), JSON.stringify(buildAnalysisSpecifications(ir), null, 2));
+  let spec: string | null = null;
+  try {
+    spec = templatesReady ? JSON.stringify(buildAnalysisSpecifications(ir), null, 2) : null;
+  } catch (e) {
+    // e.g. a module template that has not been extracted yet (bootstrap).
+    console.warn(`  ${name}: no spec.ts.json (${(e as Error).message})`);
+  }
+  if (spec) {
+    writeFileSync(join(dir, "spec.ts.json"), spec);
     // The script users download from the UI; CI runs it to check it works end to end.
     writeFileSync(join(dir, "CreateAnalysisSpecification.R"), buildRScriptFrom(rSource, ir));
   }

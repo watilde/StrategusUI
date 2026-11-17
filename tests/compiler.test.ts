@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { PRESETS, gibleed } from "../src/ir/presets/gibleed";
+import { gibleed } from "../src/ir/presets/gibleed";
+import { FIXTURES as PRESETS } from "../src/ir/presets/fixtures";
 import { buildAnalysisSpecifications, excludedCovariateConceptIds } from "../src/compiler/strategus";
 import { compareSpecs } from "../src/compiler/equivalence";
 import { buildRScript, rRawString } from "../src/compiler/rScriptBundled";
@@ -23,14 +24,17 @@ describe("TypeScript compiler vs R golden output", () => {
 
 describe("buildAnalysisSpecifications", () => {
   const spec = buildAnalysisSpecifications(gibleed) as any;
+  const cm = () => spec.moduleSpecifications.find((m: any) => m.module === "CohortMethodModule").settings.cmAnalysesSpecifications;
 
-  it("emits CohortGenerator then CohortMethod", () => {
-    expect(spec.moduleSpecifications.map((m: any) => m.module)).toEqual(["CohortGeneratorModule", "CohortMethodModule"]);
+  it("emits CohortGenerator, CohortDiagnostics (when enabled), then CohortMethod", () => {
+    expect(spec.moduleSpecifications.map((m: any) => m.module)).toEqual(["CohortGeneratorModule", "CohortDiagnosticsModule", "CohortMethodModule"]);
+    const without = buildAnalysisSpecifications({ ...gibleed, cohortDiagnostics: { enabled: false } }) as any;
+    expect(without.moduleSpecifications.map((m: any) => m.module)).toEqual(["CohortGeneratorModule", "CohortMethodModule"]);
     expect(spec.attr_class).toBe("AnalysisSpecifications");
   });
 
   it("puts negative controls before outcomes of interest", () => {
-    const tco = spec.moduleSpecifications[1].settings.cmAnalysesSpecifications.targetComparatorOutcomesList[0];
+    const tco = cm().targetComparatorOutcomesList[0];
     const outcomes = tco.outcomes as any[];
     expect(outcomes.at(-1)).toMatchObject({ outcomeId: 3, outcomeOfInterest: true });
     expect(outcomes.filter((o) => !o.outcomeOfInterest)).toHaveLength(gibleed.negativeControls.length);
@@ -41,7 +45,7 @@ describe("buildAnalysisSpecifications", () => {
   });
 
   it("numbers analyses in IR order", () => {
-    const list = spec.moduleSpecifications[1].settings.cmAnalysesSpecifications.cmAnalysisList;
+    const list = cm().cmAnalysisList;
     expect(list.map((a: any) => a.analysisId)).toEqual([1, 2]);
     expect(list[1].matchOnPsArgs).not.toBeNull();
   });
@@ -87,5 +91,15 @@ describe("buildRScript", () => {
   it("picks a raw-string delimiter that does not occur in the payload", () => {
     expect(rRawString("plain")).toBe('r"-(plain)-"');
     expect(rRawString('has )-" inside')).toBe('r"--(has )-" inside)--"');
+  });
+});
+
+describe("phenotype outcomes", () => {
+  it("embeds the published Circe definition unchanged", async () => {
+    const { variant } = await import("../src/ir/presets/fixtures");
+    const outcome = variant.outcomes.find((o) => o.kind === "phenotype")!;
+    const spec = buildAnalysisSpecifications(variant) as any;
+    const def = spec.sharedResources[0].cohortDefinitions.find((c: any) => c.cohortId === outcome.cohortId);
+    expect(JSON.parse(def.cohortDefinition)).toEqual(outcome.kind === "phenotype" ? outcome.circe : null);
   });
 });

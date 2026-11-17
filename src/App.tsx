@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { CmPresetSchema, StudyIRSchema, draftConcepts, isResolved, withPlaceholderConcepts, type CmPreset, type DraftCohortSpec, type DraftStudyIR } from "./ir/schema";
+import { CmPresetSchema, StudyIRSchema, draftConcepts, isResolved, withPlaceholderConcepts, type CmPreset, type DraftCohortSpec, type DraftOutcomeCohort, type DraftStudyIR } from "./ir/schema";
 import { gibleed } from "./ir/presets/gibleed";
 import { buildAnalysisSpecifications } from "./compiler/strategus";
 import { buildRScript } from "./compiler/rScriptBundled";
@@ -161,11 +161,11 @@ export function App() {
           </Section>
 
           <Section title="Target (I: intervention)">
-            <CohortEditor cohort={ir.target} vocabulary={vocabulary} onChange={(target) => update({ target })} />
+            <CohortEditor cohort={ir.target} vocabulary={vocabulary} onChange={(target) => update({ target: target as DraftCohortSpec })} />
           </Section>
 
           <Section title="Comparator (C: comparison)">
-            <CohortEditor cohort={ir.comparator} vocabulary={vocabulary} onChange={(comparator) => update({ comparator })} />
+            <CohortEditor cohort={ir.comparator} vocabulary={vocabulary} onChange={(comparator) => update({ comparator: comparator as DraftCohortSpec })} />
           </Section>
 
           <Section title="Outcomes (O)">
@@ -174,7 +174,8 @@ export function App() {
                 key={i}
                 cohort={o}
                 vocabulary={vocabulary}
-                onChange={(c: DraftCohortSpec) => update({ outcomes: ir.outcomes.map((x, j) => (j === i ? c : x)) })}
+                allowPhenotype
+                onChange={(c: DraftOutcomeCohort) => update({ outcomes: ir.outcomes.map((x, j) => (j === i ? c : x)) })}
                 onRemove={ir.outcomes.length > 1 ? () => update({ outcomes: ir.outcomes.filter((_, j) => j !== i) }) : undefined}
               />
             ))}
@@ -256,6 +257,19 @@ export function App() {
                 }}
               />
             ))}
+          </Section>
+
+          <Section title="Diagnostics (CohortDiagnostics)" id="section-diagnostics">
+            <Checkbox
+              checked={ir.cohortDiagnostics.enabled}
+              onChange={(enabled) => update({ cohortDiagnostics: { enabled } })}
+              label="Run CohortDiagnostics on all cohorts (recommended)"
+            />
+            <p className="hint">
+              Adds the CohortDiagnostics module before CohortMethod: cohort counts, inclusion rule attrition, source and orphan concepts, index event
+              breakdown, visit context, incidence rates, cohort overlap and temporal characterization. Review these before trusting the estimates.
+              Settings are the package defaults, from the R template.
+            </p>
           </Section>
 
           <Section title="Negative controls" id="section-negative-controls">

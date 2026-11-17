@@ -17,7 +17,7 @@ options(repos = c(ohdsi = "https://ohdsi.r-universe.dev", repos[names(repos) != 
 
 pkgs <- c(
   "CohortMethod", "CohortGenerator", "FeatureExtraction", "Cyclops", "CirceR",
-  "ParallelLogger", "jsonlite", "Eunomia", "remotes"
+  "ParallelLogger", "jsonlite", "Eunomia", "remotes", "CohortDiagnostics"
 )
 install.packages(setdiff(pkgs, rownames(installed.packages())), Ncpus = max(1, parallel::detectCores()))
 

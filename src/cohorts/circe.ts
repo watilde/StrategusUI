@@ -1,4 +1,4 @@
-import type { CohortSpec, ConceptRef } from "../ir/schema";
+import type { AnyCohort, ConceptRef } from "../ir/schema";
 
 /**
  * IR cohort -> Circe (ATLAS) cohort expression.
@@ -52,7 +52,10 @@ function conceptItem(c: ConceptRef): CirceConceptItem {
   };
 }
 
-export function toCirceExpression(cohort: CohortSpec): Record<string, unknown> {
+export function toCirceExpression(cohort: AnyCohort): Record<string, unknown> {
+  // Published definitions are used exactly as published.
+  if (cohort.kind === "phenotype") return cohort.circe;
+
   const conceptSets = [
     { id: 0, name: cohort.name, expression: { items: cohort.concepts.map(conceptItem) } },
   ];
@@ -94,6 +97,6 @@ export function toCirceExpression(cohort: CohortSpec): Record<string, unknown> {
 }
 
 /** Serialized as Strategus expects: the cohort definition is a JSON *string*. */
-export function toCirceJson(cohort: CohortSpec): string {
+export function toCirceJson(cohort: AnyCohort): string {
   return JSON.stringify(toCirceExpression(cohort), null, 2);
 }
