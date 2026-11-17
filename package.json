@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "PICO-to-Strategus UI: build OHDSI Strategus analysis specifications in the browser",
+  "description": "Strategus UI: from PICO to an OHDSI Strategus analysis specification, in the browser",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",

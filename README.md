@@ -1,8 +1,8 @@
-# PICO-to-Strategus UI
+# Strategus UI
 
 **Under development.**
 
-Build [OHDSI Strategus](https://github.com/OHDSI/Strategus) analysis specifications in the browser.
+From a PICO question to an [OHDSI Strategus](https://github.com/OHDSI/Strategus) analysis specification, built in the browser.
 It is a static site (GitHub Pages): no server, and nothing you enter leaves your browser.
 
 Current scope: comparative cohort studies with **CohortGenerator + CohortMethod**, entered through a form,

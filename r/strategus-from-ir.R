@@ -1,4 +1,4 @@
-# Build a Strategus analysis specification from a PICO-to-Strategus Study IR,
+# Build a Strategus analysis specification from a Strategus UI Study IR,
 # using only the official Strategus / CohortMethod / CohortGenerator APIs.
 #
 # This file is the single source of truth for the R side:

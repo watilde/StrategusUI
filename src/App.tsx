@@ -102,9 +102,9 @@ export function App() {
     <div className="app">
       <header className="header">
         <div>
-          <h1>PICO-to-Strategus UI</h1>
+          <h1>Strategus UI</h1>
           <p className="subtitle">
-            Build a Strategus analysis specification for a comparative cohort study (CohortGenerator + CohortMethod) entirely in your browser. Nothing you enter is sent anywhere.
+            From a PICO question to a Strategus analysis specification for a comparative cohort study (CohortGenerator + CohortMethod), built entirely in your browser. Nothing you enter is sent anywhere.
           </p>
         </div>
         <div className="header-actions">
