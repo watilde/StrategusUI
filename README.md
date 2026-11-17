@@ -99,14 +99,6 @@ Enable it once under **Settings → Pages → Source: GitHub Actions**.
 4. Smoother copy-paste loop (fewer steps between prompt, reply, repair and reload)
 5. OHDSI PhenotypeLibrary reuse; CohortDiagnostics module
 
-### Why there is no API-key mode
-
-The copy-paste harness stays the way to use an LLM. Calling an LLM API from the page would mean putting an API key
-into a static site: GitHub Pages project sites share the `<user>.github.io` origin, so stored keys are readable by
-every other Pages site of the same account, and any script on the page (a compromised dependency, an extension)
-can read the key. People would paste institutional keys. Copy-paste needs no key, keeps "nothing leaves the
-browser" true, and works with whichever LLM an institution has approved.
-
 ## Limitations
 
 - Cohorts are template-based: new users of a drug (first drug era) and first occurrence of a condition.

@@ -22,8 +22,21 @@ describe("buildPrompt", () => {
     expect(buildPrompt()).toContain(QUESTION_PLACEHOLDER);
     expect(buildPrompt("   ")).toContain(QUESTION_PLACEHOLDER);
   });
-  it("stays reasonably small", () => {
-    expect(buildPrompt().length).toBeLessThan(16000);
+  it("stays small: the schema is minified", () => {
+    const p = buildPrompt();
+    expect(p.length).toBeLessThan(10000);
+    expect(p).toContain(JSON.stringify(draftStudyIRJsonSchema()));
+  });
+  it("puts the rules and the question last, so truncating the start keeps them", () => {
+    const p = buildPrompt("QUESTION-MARKER");
+    const tail = p.slice(-Math.round(p.length * 0.25));
+    expect(tail).toContain("## Rules");
+    expect(tail).toContain("NEVER write concept IDs");
+    expect(p.lastIndexOf("QUESTION-MARKER")).toBeGreaterThan(p.indexOf("## Rules"));
+    expect(p.indexOf("## JSON Schema")).toBeLessThan(p.indexOf("## Rules"));
+  });
+  it("uses well-formed code fences", () => {
+    expect(buildPrompt().match(/```json\n/g)).toHaveLength(2);
   });
 });
 

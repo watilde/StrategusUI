@@ -85,24 +85,21 @@ const RULES = `1. Reply with exactly one JSON object that validates against the 
 8. Fill pico with short phrases and give the study a short title.
 9. If the question is ambiguous or cannot be fully expressed (for example no comparator is given), choose the most conventional option and explain it in "description".`;
 
+/**
+ * Layout: short task, reference material (schema, example), then the rules and
+ * the research question last. Some runtimes (e.g. Ollama with its default
+ * context length) silently drop the *beginning* of a long prompt; keeping the
+ * question and rules at the end means they survive. The schema is minified to
+ * keep the prompt short.
+ */
 export function buildPrompt(question?: string): string {
   const q = question?.trim() ? question.trim() : QUESTION_PLACEHOLDER;
-  return `You are helping a clinical researcher draft an observational comparative cohort study for OHDSI Strategus (CohortGenerator + CohortMethod) on an OMOP CDM database.
+  return `You are helping a clinical researcher draft an observational comparative cohort study for OHDSI Strategus (CohortGenerator + CohortMethod) on an OMOP CDM database. Turn the research question at the end of this message into a "Study IR" JSON object for Strategus UI. Reference material comes first; the rules and the question follow.
 
-Turn the research question below into a "Study IR" JSON object for Strategus UI.
-
-## Research question
-
-${q}
-
-## Rules
-
-${RULES}
-
-## JSON Schema
+## JSON Schema of the Study IR
 
 \`\`\`json
-${JSON.stringify(draftStudyIRJsonSchema(), null, 2)}
+${JSON.stringify(draftStudyIRJsonSchema())}
 \`\`\`
 
 ## Example
@@ -110,8 +107,18 @@ ${JSON.stringify(draftStudyIRJsonSchema(), null, 2)}
 Question: "In adults, does celecoxib carry a different risk of gastrointestinal bleeding than diclofenac while on treatment?"
 
 \`\`\`json
-${JSON.stringify(EXAMPLE_DRAFT, null, 2)}
+${JSON.stringify(EXAMPLE_DRAFT, null, 1)}
 \`\`\`
+
+## Rules
+
+${RULES}
+
+## Research question
+
+${q}
+
+Reply with the Study IR JSON object for this question only.
 `;
 }
 
