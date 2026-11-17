@@ -1,0 +1,105 @@
+import { describe, expect, it } from "vitest";
+import { EXAMPLE_DRAFT, QUESTION_PLACEHOLDER, buildPrompt, buildRepairPrompt, extractJson, parseDraft } from "../src/llm/prompt";
+import { StudyIRSchema, draftConcepts, draftStudyIRJsonSchema, isResolved, type DraftStudyIR } from "../src/ir/schema";
+import { InMemoryVocabulary, type CompactVocabulary } from "../src/vocab/eunomiaSource";
+import { toConceptRef } from "../src/vocab/types";
+import { buildAnalysisSpecifications } from "../src/compiler/strategus";
+import { validateStudy, hasErrors } from "../src/validate/semantic";
+import data from "../src/vocab/eunomia-vocab.json";
+
+const example = JSON.stringify(EXAMPLE_DRAFT, null, 2);
+
+describe("buildPrompt", () => {
+  it("embeds the question, rules, schema and example", () => {
+    const p = buildPrompt("Does drug A cause B?");
+    expect(p).toContain("Does drug A cause B?");
+    expect(p).toContain("NEVER write concept IDs");
+    expect(p).toContain('"$defs"');
+    expect(p).toContain('"conceptName": "celecoxib"');
+    expect(p).not.toContain(QUESTION_PLACEHOLDER);
+  });
+  it("uses a placeholder when no question is given (downloadable template)", () => {
+    expect(buildPrompt()).toContain(QUESTION_PLACEHOLDER);
+    expect(buildPrompt("   ")).toContain(QUESTION_PLACEHOLDER);
+  });
+  it("stays reasonably small", () => {
+    expect(buildPrompt().length).toBeLessThan(16000);
+  });
+});
+
+describe("LLM JSON Schema", () => {
+  const schema = draftStudyIRJsonSchema() as any;
+  it("only allows unresolved concepts", () => {
+    expect(schema.$defs.Concept.properties.conceptId).toMatchObject({ type: "null" });
+  });
+  it("keeps field descriptions", () => {
+    expect(schema.$defs.Concept.properties.conceptName.description).toMatch(/RxNorm/);
+  });
+  it("accepts the example draft", () => {
+    expect(parseDraft(example)).toMatchObject({ ok: true });
+  });
+});
+
+describe("extractJson / parseDraft", () => {
+  it("handles code fences and surrounding prose", () => {
+    const reply = `Sure! Here is the study:\n\n\`\`\`json\n${example}\n\`\`\`\n\nLet me know if you need changes.`;
+    expect(JSON.parse(extractJson(reply)).title).toBe(EXAMPLE_DRAFT.title);
+    expect(parseDraft(reply).ok).toBe(true);
+  });
+  it("handles a bare object with leading text", () => {
+    expect(parseDraft(`Result: ${JSON.stringify(EXAMPLE_DRAFT)}`).ok).toBe(true);
+  });
+  it("reports invalid JSON", () => {
+    const r = parseDraft('{"title": "x",}');
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors[0]).toMatch(/Not valid JSON/);
+  });
+  it("reports schema errors with paths", () => {
+    const bad = { ...EXAMPLE_DRAFT, design: "sccs", timeAtRisk: { ...EXAMPLE_DRAFT.timeAtRisk, startAnchor: "index" } };
+    const r = parseDraft(JSON.stringify(bad));
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.errors.some((e) => e.startsWith("design:"))).toBe(true);
+      expect(r.errors.some((e) => e.startsWith("timeAtRisk.startAnchor:"))).toBe(true);
+    }
+  });
+  it("accepts concepts with IDs too (checked later against the vocabulary)", () => {
+    const withId = structuredClone(EXAMPLE_DRAFT) as any;
+    withId.target.concepts = [
+      { conceptId: 1118084, conceptName: "celecoxib", domainId: "Drug", vocabularyId: "RxNorm", includeDescendants: true },
+    ];
+    expect(parseDraft(JSON.stringify(withId)).ok).toBe(true);
+  });
+});
+
+describe("buildRepairPrompt", () => {
+  it("lists the problems and quotes the previous JSON", () => {
+    const p = buildRepairPrompt(["design: Invalid input"], "```json\n{\"a\":1}\n```");
+    expect(p).toContain("- design: Invalid input");
+    expect(p).toContain('{"a":1}');
+  });
+});
+
+describe("resolving a draft", () => {
+  it("turns the example draft into a compilable study with the Eunomia vocabulary", async () => {
+    const vocab = new InMemoryVocabulary(data as unknown as CompactVocabulary);
+    const draft: DraftStudyIR = structuredClone(EXAMPLE_DRAFT);
+    expect(StudyIRSchema.safeParse(draft).success).toBe(false);
+
+    // Simulates a person taking the top candidate for each term.
+    for (const cohort of [draft.target, draft.comparator, ...draft.outcomes]) {
+      const domainId = cohort.kind === "drug_new_user" ? "Drug" : "Condition";
+      for (let i = 0; i < cohort.concepts.length; i++) {
+        const c = cohort.concepts[i];
+        if (isResolved(c)) continue;
+        const [top] = await vocab.search({ text: c.conceptName, domainId, limit: 1 });
+        expect(top?.conceptName.toLowerCase()).toBe(c.conceptName.toLowerCase());
+        cohort.concepts[i] = toConceptRef(top, c.includeDescendants);
+      }
+    }
+    expect(draftConcepts(draft).every((x) => isResolved(x.concept))).toBe(true);
+    const ir = StudyIRSchema.parse(draft);
+    expect(hasErrors(validateStudy(ir))).toBe(false);
+    expect(buildAnalysisSpecifications(ir).moduleSpecifications).toHaveLength(2);
+  });
+});

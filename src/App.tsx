@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { CmPresetSchema, StudyIRSchema, type CmPreset, type CohortSpec, type StudyIR } from "./ir/schema";
+import { CmPresetSchema, StudyIRSchema, draftConcepts, isResolved, type CmPreset, type DraftCohortSpec, type DraftStudyIR } from "./ir/schema";
 import { gibleed } from "./ir/presets/gibleed";
 import { buildAnalysisSpecifications } from "./compiler/strategus";
 import { buildRScript } from "./compiler/rScriptBundled";
@@ -12,6 +12,8 @@ import { CohortEditor } from "./components/CohortEditor";
 import { OutputPanel } from "./components/OutputPanel";
 import { VocabularyPanel } from "./components/VocabularyPanel";
 import { NegativeControlEditor } from "./components/NegativeControlEditor";
+import { LlmDraftPanel } from "./components/LlmDraftPanel";
+import { parseDraft } from "./llm/prompt";
 import { Checkbox, Field, NumberInput, Section, Select } from "./components/fields";
 
 const PRESET_LABEL: Record<CmPreset, string> = {
@@ -22,15 +24,15 @@ const PRESET_LABEL: Record<CmPreset, string> = {
 
 const DUPLICATE_OPTIONS = ["keep all", "keep first", "remove all", "keep first, truncate to second"] as const;
 
-function nextCohortId(ir: StudyIR): number {
+function nextCohortId(ir: DraftStudyIR): number {
   const ids = [ir.target, ir.comparator, ...ir.outcomes].map((c) => c.cohortId);
   return Math.max(0, ...ids) + 1;
 }
 
 export function App() {
-  const [ir, setIr] = useState<StudyIR>(gibleed);
+  const [ir, setIr] = useState<DraftStudyIR>(gibleed);
   const [importError, setImportError] = useState<string | null>(null);
-  const update = (patch: Partial<StudyIR>) => setIr((prev) => ({ ...prev, ...patch }));
+  const update = (patch: Partial<DraftStudyIR>) => setIr((prev) => ({ ...prev, ...patch }));
   const [vocabulary, setVocabulary] = useState<VocabularySource | null>(null);
   const [conceptIssues, setConceptIssues] = useState<Issue[]>([]);
 
@@ -40,6 +42,16 @@ export function App() {
   useEffect(useDemoVocabulary, []);
 
   const { issues, specJson, rScript } = useMemo(() => {
+    // Unresolved concepts (from an LLM draft) must be matched to the vocabulary first.
+    const unresolved = draftConcepts(ir).filter((x) => !isResolved(x.concept));
+    if (unresolved.length > 0) {
+      const unresolvedIssues: Issue[] = unresolved.map((u) => ({
+        level: "error",
+        path: u.path,
+        message: `“${u.concept.conceptName}” (${u.cohortName}) is not matched to a vocabulary concept yet`,
+      }));
+      return { issues: unresolvedIssues, specJson: null, rScript: null };
+    }
     const parsed = StudyIRSchema.safeParse(ir);
     if (!parsed.success) {
       const schemaIssues: Issue[] = parsed.error.issues.map((i) => ({
@@ -83,15 +95,15 @@ export function App() {
 
   const importIr = async (file: File) => {
     try {
-      const parsed = StudyIRSchema.safeParse(JSON.parse(await file.text()));
-      if (!parsed.success) {
-        setImportError(parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("\n"));
+      const result = parseDraft(await file.text());
+      if (!result.ok) {
+        setImportError(result.errors.join("\n"));
         return;
       }
       setImportError(null);
-      setIr(parsed.data);
+      setIr(result.draft);
     } catch (e) {
-      setImportError(`Could not parse JSON: ${(e as Error).message}`);
+      setImportError(`Could not read the file: ${(e as Error).message}`);
     }
   };
 
@@ -130,6 +142,8 @@ export function App() {
 
       <main className="layout">
         <form className="form" onSubmit={(e) => e.preventDefault()}>
+          <LlmDraftPanel onLoad={setIr} />
+
           <VocabularyPanel vocabulary={vocabulary} onUseDemo={useDemoVocabulary} onOpenAthena={openAthena} />
 
           <Section title="Study">
@@ -143,7 +157,7 @@ export function App() {
                 </Field>
               ))}
             </div>
-            <p className="hint">The PICO text is kept for reference only and is not compiled. In step 3 it becomes the input for an LLM-drafted IR.</p>
+            <p className="hint">The PICO text is kept for reference only and is not compiled.</p>
           </Section>
 
           <Section title="Target (I: intervention)">
@@ -160,7 +174,7 @@ export function App() {
                 key={i}
                 cohort={o}
                 vocabulary={vocabulary}
-                onChange={(c: CohortSpec) => update({ outcomes: ir.outcomes.map((x, j) => (j === i ? c : x)) })}
+                onChange={(c: DraftCohortSpec) => update({ outcomes: ir.outcomes.map((x, j) => (j === i ? c : x)) })}
                 onRemove={ir.outcomes.length > 1 ? () => update({ outcomes: ir.outcomes.filter((_, j) => j !== i) }) : undefined}
               />
             ))}

@@ -527,3 +527,63 @@ button.small {
 a {
   color: var(--accent);
 }
+
+textarea {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  width: 100%;
+  resize: vertical;
+}
+
+textarea.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+}
+
+.steps {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.steps > li {
+  margin-bottom: 10px;
+}
+
+.notice {
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 8px 0 0;
+  font-size: 0.9rem;
+}
+
+.notice.ok {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.notice.error {
+  background: var(--error-bg);
+  color: var(--error);
+}
+
+.notice ul {
+  margin: 4px 0 8px;
+  padding-left: 18px;
+  font-size: 0.8rem;
+}
+
+.notice p {
+  margin: 0;
+}
+
+.unresolved-row td {
+  background: var(--warning-bg);
+}
+
+.resolve .search-results {
+  max-height: none;
+}

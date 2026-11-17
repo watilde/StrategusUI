@@ -5,20 +5,27 @@
 From a PICO question to an [OHDSI Strategus](https://github.com/OHDSI/Strategus) analysis specification, built in the browser.
 It is a static site (GitHub Pages): no server, and nothing you enter leaves your browser.
 
-Current scope: comparative cohort studies with **CohortGenerator + CohortMethod**, entered through a form,
-with concept search over a vocabulary. The Eunomia GiBleed example (celecoxib vs diclofenac → GI bleed) is built in.
+Current scope: comparative cohort studies with **CohortGenerator + CohortMethod**, drafted with any LLM through a
+copy-paste prompt (or entered through the form), with concept search over a vocabulary. The Eunomia GiBleed example (celecoxib vs diclofenac → GI bleed) is built in.
 
 ## Architecture
 
 ```
-form (later: LLM draft) ──► Study IR (Zod) ──► TypeScript compiler ──► analysisSpecification.json
+LLM (copy-paste) / form ──► Study IR (Zod) ──► TypeScript compiler ──► analysisSpecification.json
                                │                    ▲                  CreateAnalysisSpecification.R
                                │                    │ templates
                                └──► r/strategus-from-ir.R (official R APIs) ── CI: must produce the same JSON
 ```
 
-- **Study IR** (`src/ir/schema.ts`) is the only thing a person (or, later, an LLM) writes.
+- **Study IR** (`src/ir/schema.ts`) is the only thing a person or an LLM writes.
   It is small and domain-oriented; it does not mirror Strategus' JSON.
+  A *draft* IR may contain unresolved concepts (`{"conceptId": null, "conceptName": "celecoxib"}`).
+- **LLM harness** (`src/llm/prompt.ts`). The page never calls an LLM and needs no API key. It builds a prompt
+  (research question + rules + a compact JSON Schema + an example) that you paste into any LLM, or download as a
+  template. You paste the reply back; the app extracts the JSON, validates it, and if it is invalid generates a
+  repair prompt listing the problems. The LLM is told never to write concept IDs: it writes clinical terms, and a
+  person matches each one to a vocabulary concept from a short list of candidates. Negative controls are left to
+  the person as well.
 - **The compiler** (`src/compiler/strategus.ts`, `src/cohorts/circe.ts`) is deterministic.
   It never invents CohortMethod / FeatureExtraction / Cyclops defaults: the full settings of each
   analysis preset come from `src/compiler/templates/cm-templates.json`, which is generated from the
@@ -87,7 +94,8 @@ Enable it once under **Settings → Pages → Source: GitHub Actions**.
 1. ✅ Form → IR → CohortGenerator + CohortMethod JSON and R script; CI checks against R and Eunomia
 2. ✅ Concept search: bundled Eunomia vocabulary + user-provided Athena vocabulary via DuckDB-WASM (read locally, never uploaded);
    descendant preview; concept checks
-3. LLM, copy-paste mode: generate a prompt with the IR JSON Schema, paste the answer back, validate, generate a repair prompt
+3. ✅ LLM, copy-paste mode: prompt (copy or download as a template) → paste the reply → validate → repair prompt;
+   terms resolved to concepts by a person
 4. LLM, bring-your-own-key mode (direct browser calls)
 5. OHDSI PhenotypeLibrary reuse; CohortDiagnostics module
 

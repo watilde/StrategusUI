@@ -3,9 +3,15 @@ import { z } from "zod";
 /**
  * Study IR (intermediate representation).
  *
- * This is the only structure that humans (forms) and, later, LLMs are allowed
- * to produce. Everything downstream (Circe cohort JSON, Strategus analysis
+ * This is the only structure that people (forms) and LLMs are allowed to
+ * produce. Everything downstream (Circe cohort JSON, Strategus analysis
  * specification, R script) is compiled from it deterministically.
+ *
+ * Two variants share one definition:
+ *   - StudyIRSchema:      every concept resolved to a vocabulary concept (compilable)
+ *   - DraftStudyIRSchema: concepts may be unresolved ({ conceptId: null, conceptName })
+ *                         so an LLM never has to guess concept IDs; the app resolves
+ *                         them against the loaded vocabulary with a person choosing.
  *
  * Keep it small and domain-oriented. Do not mirror Strategus' JSON here.
  */
@@ -24,30 +30,24 @@ export const ConceptRefSchema = z.object({
 });
 export type ConceptRef = z.infer<typeof ConceptRefSchema>;
 
-const cohortBase = {
-  cohortId: z.number().int().positive(),
-  name: z.string().min(1),
-  concepts: z.array(ConceptRefSchema).min(1),
-};
+export const UnresolvedConceptSchema = z
+  .object({
+    conceptId: z.null().describe("Always null: the app looks the concept up in the vocabulary."),
+    conceptName: z
+      .string()
+      .min(1)
+      .describe("English clinical term as named in OMOP standard vocabularies, e.g. an RxNorm ingredient ('celecoxib') or a SNOMED condition ('Gastrointestinal hemorrhage')."),
+    includeDescendants: z.boolean().default(true),
+  })
+  .describe("A concept to be resolved against the vocabulary in the app.");
+export type UnresolvedConcept = z.infer<typeof UnresolvedConceptSchema>;
 
-/** New users of a drug: first drug era, era ends after a persistence gap. */
-export const DrugNewUserCohortSchema = z.object({
-  ...cohortBase,
-  kind: z.literal("drug_new_user"),
-  eraGapDays: z.number().int().min(0).default(30),
-});
+export const DraftConceptSchema = z.union([ConceptRefSchema, UnresolvedConceptSchema]);
+export type DraftConcept = z.infer<typeof DraftConceptSchema>;
 
-/** First occurrence of a condition; one-day cohort (end = start). */
-export const ConditionFirstCohortSchema = z.object({
-  ...cohortBase,
-  kind: z.literal("condition_first"),
-});
-
-export const CohortSpecSchema = z.discriminatedUnion("kind", [
-  DrugNewUserCohortSchema,
-  ConditionFirstCohortSchema,
-]);
-export type CohortSpec = z.infer<typeof CohortSpecSchema>;
+export function isResolved(c: DraftConcept): c is ConceptRef {
+  return c.conceptId !== null;
+}
 
 export const NegativeControlSchema = z.object({
   cohortId: z.number().int().positive(),
@@ -62,72 +62,157 @@ export const AnchorSchema = z.enum(["cohort start", "cohort end"]);
 export const CmPresetSchema = z.enum(["unadjusted", "ps_match_1to1", "ps_stratify_10"]);
 export type CmPreset = z.infer<typeof CmPresetSchema>;
 
-export const StudyIRSchema = z.object({
-  irVersion: z.literal(IR_VERSION),
-  title: z.string().min(1),
-  description: z.string().default(""),
-  design: z.literal("cohort_method"),
-  /** PICO as entered by the user. Informational only; never compiled. */
-  pico: z
+function makeSchemas<C extends z.ZodType>(concept: C) {
+  const cohortBase = {
+    cohortId: z.number().int().positive(),
+    name: z.string().min(1),
+    concepts: z.array(concept).min(1),
+  };
+
+  const drugNewUser = z
     .object({
-      population: z.string().default(""),
-      intervention: z.string().default(""),
-      comparison: z.string().default(""),
-      outcome: z.string().default(""),
+      ...cohortBase,
+      kind: z.literal("drug_new_user"),
+      eraGapDays: z.number().int().min(0).default(30).describe("Days allowed between exposures before the drug era ends."),
     })
-    .default({ population: "", intervention: "", comparison: "", outcome: "" }),
-  target: CohortSpecSchema,
-  comparator: CohortSpecSchema,
-  outcomes: z.array(CohortSpecSchema).min(1),
-  negativeControls: z.array(NegativeControlSchema).default([]),
-  negativeControlSettings: z
+    .describe("New users of a drug: first drug era; the era ends after a persistence gap.");
+
+  const conditionFirst = z
     .object({
-      occurrenceType: z.enum(["first", "all"]).default("first"),
-      detectOnDescendants: z.boolean().default(true),
-      priorOutcomeLookback: z.number().int().min(0).default(30),
+      ...cohortBase,
+      kind: z.literal("condition_first"),
     })
-    .default({ occurrenceType: "first", detectOnDescendants: true, priorOutcomeLookback: 30 }),
-  population: z.object({
-    washoutDays: z.number().int().min(0),
-    firstExposureOnly: z.boolean(),
-    removeDuplicateSubjects: z.enum([
-      "keep all",
-      "keep first",
-      "remove all",
-      "keep first, truncate to second",
-    ]),
-    restrictToCommonPeriod: z.boolean(),
-    minAge: z.number().int().min(0).nullable(),
-    maxAge: z.number().int().min(0).nullable(),
-    /** yyyymmdd or "" */
-    studyStartDate: z.string().regex(/^(\d{8})?$/),
-    studyEndDate: z.string().regex(/^(\d{8})?$/),
-    maxCohortSize: z.number().int().min(0),
-  }),
-  timeAtRisk: z.object({
-    riskWindowStart: z.number().int(),
-    startAnchor: AnchorSchema,
-    riskWindowEnd: z.number().int(),
-    endAnchor: AnchorSchema,
-    minDaysAtRisk: z.number().int().min(0),
-  }),
-  cohortMethod: z.object({
-    analyses: z.array(CmPresetSchema).min(1),
-    /**
-     * Covariates to exclude from PS / outcome models. Usually the target and
-     * comparator ingredients. Empty means "derive from target+comparator".
-     */
-    excludedCovariateConceptIds: z.array(z.number().int().positive()).default([]),
-  }),
-});
+    .describe("First occurrence of a condition (one-day cohort).");
+
+  const cohort = z.discriminatedUnion("kind", [drugNewUser, conditionFirst]);
+
+  const study = z.object({
+    irVersion: z.literal(IR_VERSION),
+    title: z.string().min(1),
+    description: z.string().default("").describe("Free text. Note any assumptions made when the question was ambiguous."),
+    design: z.literal("cohort_method"),
+    /** PICO as entered by the user. Informational only; never compiled. */
+    pico: z
+      .object({
+        population: z.string().default(""),
+        intervention: z.string().default(""),
+        comparison: z.string().default(""),
+        outcome: z.string().default(""),
+      })
+      .default({ population: "", intervention: "", comparison: "", outcome: "" }),
+    target: cohort.describe("Intervention (I): usually a drug_new_user cohort."),
+    comparator: cohort.describe("Comparison (C): usually a drug_new_user cohort."),
+    outcomes: z.array(cohort).min(1).describe("Outcomes (O): usually condition_first cohorts."),
+    negativeControls: z.array(NegativeControlSchema).default([]),
+    negativeControlSettings: z
+      .object({
+        occurrenceType: z.enum(["first", "all"]).default("first"),
+        detectOnDescendants: z.boolean().default(true),
+        priorOutcomeLookback: z.number().int().min(0).default(30),
+      })
+      .default({ occurrenceType: "first", detectOnDescendants: true, priorOutcomeLookback: 30 }),
+    population: z.object({
+      washoutDays: z.number().int().min(0).describe("Required observation before cohort entry (days)."),
+      firstExposureOnly: z.boolean(),
+      removeDuplicateSubjects: z.enum(["keep all", "keep first", "remove all", "keep first, truncate to second"]),
+      restrictToCommonPeriod: z.boolean(),
+      minAge: z.number().int().min(0).nullable(),
+      maxAge: z.number().int().min(0).nullable(),
+      studyStartDate: z.string().regex(/^(\d{8})?$/).describe('yyyymmdd or ""'),
+      studyEndDate: z.string().regex(/^(\d{8})?$/).describe('yyyymmdd or ""'),
+      maxCohortSize: z.number().int().min(0).describe("0 = no limit"),
+    }),
+    timeAtRisk: z.object({
+      riskWindowStart: z.number().int(),
+      startAnchor: AnchorSchema,
+      riskWindowEnd: z.number().int(),
+      endAnchor: AnchorSchema,
+      minDaysAtRisk: z.number().int().min(0),
+    }),
+    cohortMethod: z.object({
+      analyses: z.array(CmPresetSchema).min(1),
+      /**
+       * Covariates to exclude from PS / outcome models. Usually the target and
+       * comparator ingredients. Empty means "derive from target+comparator".
+       */
+      excludedCovariateConceptIds: z
+        .array(z.number().int().positive())
+        .default([])
+        .describe("Leave empty: the target and comparator concepts are excluded automatically."),
+    }),
+  });
+
+  return { drugNewUser, conditionFirst, cohort, study };
+}
+
+const resolved = makeSchemas(ConceptRefSchema);
+const draft = makeSchemas(DraftConceptSchema);
+/** What the LLM is asked to write: concepts are always unresolved. */
+const llm = makeSchemas(UnresolvedConceptSchema);
+// Named, shared definitions ($defs) in generated JSON Schemas. Merged into the
+// global registry so descriptions set with .describe() are kept.
+for (const [schema, id] of [
+  [llm.cohort, "Cohort"],
+  [UnresolvedConceptSchema, "Concept"],
+  [NegativeControlSchema, "NegativeControl"],
+] as const) {
+  z.globalRegistry.add(schema, { ...z.globalRegistry.get(schema), id });
+}
+
+export const DrugNewUserCohortSchema = resolved.drugNewUser;
+export const ConditionFirstCohortSchema = resolved.conditionFirst;
+export const CohortSpecSchema = resolved.cohort;
+export type CohortSpec = z.infer<typeof CohortSpecSchema>;
+
+export const StudyIRSchema = resolved.study;
 export type StudyIR = z.infer<typeof StudyIRSchema>;
 export type StudyIRInput = z.input<typeof StudyIRSchema>;
+
+export const DraftCohortSpecSchema = draft.cohort;
+export type DraftCohortSpec = z.infer<typeof DraftCohortSpecSchema>;
+export const DraftStudyIRSchema = draft.study;
+export type DraftStudyIR = z.infer<typeof DraftStudyIRSchema>;
 
 export function parseStudyIR(input: unknown) {
   return StudyIRSchema.safeParse(input);
 }
 
-/** JSON Schema of the IR, for embedding in LLM prompts (step 3) and docs. */
+/** JSON Schema of the IR (fully resolved). */
 export function studyIRJsonSchema() {
   return z.toJSONSchema(StudyIRSchema, { io: "input" });
+}
+
+/** Drops JSON Schema noise from z.number().int() (safe-integer bounds). */
+function stripSafeIntegerBounds(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stripSafeIntegerBounds);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([k, v]) => !((k === "maximum" || k === "minimum") && Math.abs(v as number) === Number.MAX_SAFE_INTEGER))
+        .map(([k, v]) => [k, stripSafeIntegerBounds(v)]),
+    );
+  }
+  return value;
+}
+
+/**
+ * JSON Schema embedded in the LLM prompt: concepts are always unresolved and
+ * repeated parts (cohorts, concepts) are shared through $defs to keep it short.
+ * Parsing still uses DraftStudyIRSchema, which also accepts resolved concepts.
+ */
+export function draftStudyIRJsonSchema() {
+  return stripSafeIntegerBounds(z.toJSONSchema(llm.study, { io: "input" }));
+}
+
+/** Every concept in a draft, with its location, for resolution UIs and checks. */
+export function draftConcepts(ir: DraftStudyIR): { path: string; cohortName: string; domainId: string; concept: DraftConcept }[] {
+  const domainOf = (c: DraftCohortSpec) => (c.kind === "drug_new_user" ? "Drug" : "Condition");
+  const cohorts: [string, DraftCohortSpec][] = [
+    ["target", ir.target],
+    ["comparator", ir.comparator],
+    ...ir.outcomes.map((o, i): [string, DraftCohortSpec] => [`outcomes[${i}]`, o]),
+  ];
+  return cohorts.flatMap(([path, cohort]) =>
+    cohort.concepts.map((concept, i) => ({ path: `${path}.concepts[${i}]`, cohortName: cohort.name, domainId: domainOf(cohort), concept })),
+  );
 }

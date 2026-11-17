@@ -1,11 +1,11 @@
-import type { NegativeControl, StudyIR } from "../ir/schema";
+import type { DraftStudyIR, NegativeControl } from "../ir/schema";
 import type { VocabularySource } from "../vocab/types";
 import { EUNOMIA_NEGATIVE_CONTROLS } from "../vocab/eunomia";
 import { ConceptSearch } from "./ConceptSearch";
 
 export const NEGATIVE_CONTROL_ID_START = 10000;
 
-function nextId(ir: StudyIR): number {
+function nextId(ir: DraftStudyIR): number {
   const ids = [ir.target, ir.comparator, ...ir.outcomes].map((c) => c.cohortId).concat(ir.negativeControls.map((n) => n.cohortId));
   return Math.max(NEGATIVE_CONTROL_ID_START - 1, ...ids) + 1;
 }
@@ -15,7 +15,7 @@ export function NegativeControlEditor({
   vocabulary,
   onChange,
 }: {
-  ir: StudyIR;
+  ir: DraftStudyIR;
   vocabulary: VocabularySource | null;
   onChange: (ncs: NegativeControl[]) => void;
 }) {

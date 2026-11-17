@@ -1,20 +1,21 @@
 import { Fragment, useState } from "react";
-import type { CohortSpec, ConceptRef } from "../ir/schema";
+import { isResolved, type ConceptRef, type DraftCohortSpec, type DraftConcept } from "../ir/schema";
 import { toConceptRef, type VocabularySource } from "../vocab/types";
 import { ConceptSearch } from "./ConceptSearch";
 import { DescendantPreview } from "./DescendantPreview";
+import { ResolveConcept } from "./ResolveConcept";
 import { Checkbox, Field, NumberInput, Select } from "./fields";
 
-const KIND_LABEL: Record<CohortSpec["kind"], string> = {
+const KIND_LABEL: Record<DraftCohortSpec["kind"], string> = {
   drug_new_user: "New users of a drug (first drug era)",
   condition_first: "First occurrence of a condition",
 };
-const KIND_DOMAIN: Record<CohortSpec["kind"], string> = {
+const KIND_DOMAIN: Record<DraftCohortSpec["kind"], string> = {
   drug_new_user: "Drug",
   condition_first: "Condition",
 };
 
-function changeKind(cohort: CohortSpec, kind: CohortSpec["kind"]): CohortSpec {
+function changeKind(cohort: DraftCohortSpec, kind: DraftCohortSpec["kind"]): DraftCohortSpec {
   const base = { cohortId: cohort.cohortId, name: cohort.name, concepts: cohort.concepts };
   return kind === "drug_new_user" ? { ...base, kind, eraGapDays: 30 } : { ...base, kind };
 }
@@ -58,14 +59,14 @@ export function CohortEditor({
   onChange,
   onRemove,
 }: {
-  cohort: CohortSpec;
+  cohort: DraftCohortSpec;
   vocabulary: VocabularySource | null;
-  onChange: (c: CohortSpec) => void;
+  onChange: (c: DraftCohortSpec) => void;
   onRemove?: () => void;
 }) {
   const domain = KIND_DOMAIN[cohort.kind];
   const [preview, setPreview] = useState<number | null>(null);
-  const setConcepts = (concepts: ConceptRef[]) => onChange({ ...cohort, concepts });
+  const setConcepts = (concepts: DraftConcept[]) => onChange({ ...cohort, concepts });
 
   return (
     <div className="cohort">
@@ -86,7 +87,7 @@ export function CohortEditor({
         <Field label="Type">
           <Select
             value={cohort.kind}
-            options={(Object.keys(KIND_LABEL) as CohortSpec["kind"][]).map((k) => ({ value: k, label: KIND_LABEL[k] }))}
+            options={(Object.keys(KIND_LABEL) as DraftCohortSpec["kind"][]).map((k) => ({ value: k, label: KIND_LABEL[k] }))}
             onChange={(k) => onChange(changeKind(cohort, k))}
           />
         </Field>
@@ -108,50 +109,92 @@ export function CohortEditor({
           </tr>
         </thead>
         <tbody>
-          {cohort.concepts.map((c, i) => (
-            <Fragment key={c.conceptId}>
-              <tr>
-                <td className="mono">{c.conceptId}</td>
-                <td>{c.conceptName}</td>
-                <td>{c.vocabularyId}</td>
-                <td className="nowrap">
-                  <input
-                    type="checkbox"
-                    checked={c.includeDescendants}
-                    aria-label={`Include descendants of ${c.conceptName}`}
-                    onChange={(e) => setConcepts(cohort.concepts.map((x, j) => (j === i ? { ...x, includeDescendants: e.target.checked } : x)))}
-                  />{" "}
-                  {vocabulary && (
+          {cohort.concepts.map((c, i) =>
+            isResolved(c) ? (
+              <Fragment key={c.conceptId}>
+                <tr>
+                  <td className="mono">{c.conceptId}</td>
+                  <td>{c.conceptName}</td>
+                  <td>{c.vocabularyId}</td>
+                  <td className="nowrap">
+                    <input
+                      type="checkbox"
+                      checked={c.includeDescendants}
+                      aria-label={`Include descendants of ${c.conceptName}`}
+                      onChange={(e) => setConcepts(cohort.concepts.map((x, j) => (j === i ? { ...x, includeDescendants: e.target.checked } : x)))}
+                    />{" "}
+                    {vocabulary && (
+                      <button
+                        type="button"
+                        className="ghost small"
+                        aria-expanded={preview === c.conceptId}
+                        onClick={() => setPreview(preview === c.conceptId ? null : c.conceptId)}
+                      >
+                        {preview === c.conceptId ? "Hide" : "Preview"}
+                      </button>
+                    )}
+                  </td>
+                  <td>
                     <button
                       type="button"
-                      className="ghost small"
-                      aria-expanded={preview === c.conceptId}
-                      onClick={() => setPreview(preview === c.conceptId ? null : c.conceptId)}
+                      className="ghost"
+                      aria-label={`Remove ${c.conceptName}`}
+                      onClick={() => setConcepts(cohort.concepts.filter((_, j) => j !== i))}
                     >
-                      {preview === c.conceptId ? "Hide" : "Preview"}
+                      ×
                     </button>
-                  )}
-                </td>
-                <td>
-                  <button
-                    type="button"
-                    className="ghost"
-                    aria-label={`Remove ${c.conceptName}`}
-                    onClick={() => setConcepts(cohort.concepts.filter((_, j) => j !== i))}
-                  >
-                    ×
-                  </button>
-                </td>
-              </tr>
-              {preview === c.conceptId && vocabulary && (
-                <tr className="preview-row">
-                  <td colSpan={5}>
-                    <DescendantPreview vocabulary={vocabulary} conceptId={c.conceptId} />
                   </td>
                 </tr>
-              )}
-            </Fragment>
-          ))}
+                {preview === c.conceptId && vocabulary && (
+                  <tr className="preview-row">
+                    <td colSpan={5}>
+                      <DescendantPreview vocabulary={vocabulary} conceptId={c.conceptId} />
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            ) : (
+              <Fragment key={`unresolved-${i}-${c.conceptName}`}>
+                <tr className="unresolved-row">
+                  <td>
+                    <span className="badge warning">unresolved</span>
+                  </td>
+                  <td>{c.conceptName}</td>
+                  <td />
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={c.includeDescendants}
+                      aria-label={`Include descendants of ${c.conceptName}`}
+                      onChange={(e) => setConcepts(cohort.concepts.map((x, j) => (j === i ? { ...x, includeDescendants: e.target.checked } : x)))}
+                    />
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      className="ghost"
+                      aria-label={`Remove ${c.conceptName}`}
+                      onClick={() => setConcepts(cohort.concepts.filter((_, j) => j !== i))}
+                    >
+                      ×
+                    </button>
+                  </td>
+                </tr>
+                <tr className="preview-row">
+                  <td colSpan={5}>
+                    <ResolveConcept
+                      term={c.conceptName}
+                      domainId={domain}
+                      vocabulary={vocabulary}
+                      onPick={(picked) =>
+                        setConcepts(cohort.concepts.map((x, j) => (j === i ? toConceptRef(picked, c.includeDescendants) : x)))
+                      }
+                    />
+                  </td>
+                </tr>
+              </Fragment>
+            ),
+          )}
           {cohort.concepts.length === 0 && (
             <tr>
               <td colSpan={5} className="empty">
@@ -165,11 +208,11 @@ export function CohortEditor({
       <ConceptSearch
         vocabulary={vocabulary}
         domainId={domain}
-        excludeIds={cohort.concepts.map((c) => c.conceptId)}
+        excludeIds={cohort.concepts.filter(isResolved).map((c) => c.conceptId)}
         placeholder={`Add a ${domain.toLowerCase()} concept: name, code or concept ID`}
         onPick={(c) => setConcepts([...cohort.concepts, toConceptRef(c)])}
       />
-      <ManualConcept domainId={domain} onAdd={(c) => setConcepts([...cohort.concepts, c])} />
+      <ManualConcept domainId={domain} onAdd={(c: ConceptRef) => setConcepts([...cohort.concepts, c])} />
       {cohort.concepts.length > 1 && (
         <Checkbox
           checked={cohort.concepts.every((c) => c.includeDescendants)}
